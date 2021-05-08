@@ -1,4 +1,5 @@
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
+use conquer_once::spin::OnceCell;
 use core::{convert::TryFrom, ops::Range};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,12 +41,32 @@ impl<T> Vector2d<T> {
 
 pub(crate) type Point<T> = Vector2d<T>;
 
+static INFO: OnceCell<FrameBufferInfo> = OnceCell::uninit();
+static DRAWER: OnceCell<spin::Mutex<Drawer>> = OnceCell::uninit();
+
+pub(crate) fn init(framebuffer: FrameBuffer) {
+    INFO.try_init_once(|| framebuffer.info())
+        .expect("faield to initialize INFO");
+    DRAWER
+        .try_init_once(|| spin::Mutex::new(Drawer::new(framebuffer)))
+        .expect("failed to initialize DRAWER");
+}
+
+pub(crate) fn info() -> &'static FrameBufferInfo {
+    INFO.try_get().expect("INFO is not initialized")
+}
+
+pub(crate) fn lock_drawer() -> spin::MutexGuard<'static, Drawer> {
+    // TODO: consider interrupts
+    DRAWER.try_get().expect("DRAWER is not initialized").lock()
+}
+
 pub(crate) struct Drawer {
     inner: FrameBuffer,
 }
 
 impl Drawer {
-    pub(crate) fn new(inner: FrameBuffer) -> Self {
+    fn new(inner: FrameBuffer) -> Self {
         Self { inner }
     }
 

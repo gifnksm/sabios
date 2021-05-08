@@ -15,11 +15,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         .expect("framebuffer not supported");
     framebuffer::init(framebuffer);
 
-    {
+    for _ in 0..10 {
         let mut drawer = framebuffer::lock_drawer();
         for x in drawer.x_range() {
             for y in drawer.y_range() {
                 drawer.draw(Point::new(x, y), Color::WHITE);
+            }
+        }
+        for x in drawer.x_range() {
+            for y in drawer.y_range() {
+                drawer.draw(Point::new(x, y), Color::BLACK);
             }
         }
         for x in 0..200 {

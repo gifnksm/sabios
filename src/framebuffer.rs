@@ -63,11 +63,16 @@ pub(crate) fn lock_drawer() -> spin::MutexGuard<'static, Drawer> {
 
 pub(crate) struct Drawer {
     inner: FrameBuffer,
+    pixel_drawer: &'static (dyn PixelDraw + Send + Sync),
 }
 
 impl Drawer {
     fn new(inner: FrameBuffer) -> Self {
-        Self { inner }
+        let pixel_drawer = select_pixel_drawer(inner.info().pixel_format);
+        Self {
+            inner,
+            pixel_drawer,
+        }
     }
 
     pub(crate) fn info(&self) -> FrameBufferInfo {
@@ -90,23 +95,8 @@ impl Drawer {
             Some(p) => p,
             None => return false,
         };
-        match self.info().pixel_format {
-            PixelFormat::RGB => {
-                self.inner.buffer_mut()[pixel_index] = c.r;
-                self.inner.buffer_mut()[pixel_index + 1] = c.g;
-                self.inner.buffer_mut()[pixel_index + 2] = c.b;
-            }
-            PixelFormat::BGR => {
-                self.inner.buffer_mut()[pixel_index] = c.b;
-                self.inner.buffer_mut()[pixel_index + 1] = c.g;
-                self.inner.buffer_mut()[pixel_index + 2] = c.r;
-            }
-            PixelFormat::U8 => {
-                self.inner.buffer_mut()[pixel_index] = c.to_grayscale();
-            }
-            _ => return false,
-        }
-        true
+        self.pixel_drawer
+            .pixel_draw(self.inner.buffer_mut(), pixel_index, c)
     }
 
     fn pixel_index<T>(&self, p: Point<T>) -> Option<usize>
@@ -125,5 +115,61 @@ impl Drawer {
             return None;
         }
         Some((y * stride + x) * bytes_per_pixel)
+    }
+}
+
+trait PixelDraw {
+    fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color) -> bool;
+}
+
+fn select_pixel_drawer(pixel_format: PixelFormat) -> &'static (dyn PixelDraw + Send + Sync) {
+    match pixel_format {
+        PixelFormat::RGB => &RGB_PIXEL_DRAWER as _,
+        PixelFormat::BGR => &BGR_PIXEL_DRAWER as _,
+        PixelFormat::U8 => &U8_PIXEL_DRAWER as _,
+        _ => &UNSUPPORTED_PIXEL_DRAWER as _,
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RgbPixelDrawer;
+static RGB_PIXEL_DRAWER: RgbPixelDrawer = RgbPixelDrawer;
+impl PixelDraw for RgbPixelDrawer {
+    fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color) -> bool {
+        buffer[pixel_index] = c.r;
+        buffer[pixel_index + 1] = c.g;
+        buffer[pixel_index + 2] = c.b;
+        true
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BgrPixelDrawer;
+static BGR_PIXEL_DRAWER: BgrPixelDrawer = BgrPixelDrawer;
+impl PixelDraw for BgrPixelDrawer {
+    fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color) -> bool {
+        buffer[pixel_index] = c.b;
+        buffer[pixel_index + 1] = c.g;
+        buffer[pixel_index + 2] = c.r;
+        true
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct U8PixelDrawer;
+static U8_PIXEL_DRAWER: U8PixelDrawer = U8PixelDrawer;
+impl PixelDraw for U8PixelDrawer {
+    fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color) -> bool {
+        buffer[pixel_index] = c.to_grayscale();
+        true
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct UnsupportedPixelDrawer;
+static UNSUPPORTED_PIXEL_DRAWER: UnsupportedPixelDrawer = UnsupportedPixelDrawer;
+impl PixelDraw for UnsupportedPixelDrawer {
+    fn pixel_draw(&self, _buffer: &mut [u8], _pixel_index: usize, _c: Color) -> bool {
+        false
     }
 }

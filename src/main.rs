@@ -1,17 +1,27 @@
 #![no_std]
 #![no_main]
 
-use bootloader::{entry_point, BootInfo};
-use core::panic::PanicInfo;
+use crate::framebuffer::Drawer;
+use bootloader::{boot_info::Optional, entry_point, BootInfo};
+use core::{mem, panic::PanicInfo};
+use framebuffer::{Color, Point};
+
+mod framebuffer;
 
 entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
-        let mut value = 0x90;
-        for byte in framebuffer.buffer_mut() {
-            *byte = value;
-            value = value.wrapping_add(1);
+    if let Some(framebuffer) = mem::replace(&mut boot_info.framebuffer, Optional::None).into() {
+        let mut drawer = Drawer::new(framebuffer);
+        for x in drawer.x_range() {
+            for y in drawer.y_range() {
+                drawer.draw(Point::new(x, y), Color::WHITE);
+            }
+        }
+        for x in 0..200 {
+            for y in 0..100 {
+                drawer.draw(Point::new(x, y), Color::GREEN);
+            }
         }
     }
     loop {}

@@ -4,10 +4,25 @@ use std::{path::Path, process::Command};
 fn main() {
     let bootloader_manifest = locate_bootloader("bootloader").unwrap();
 
+    // HACK: detect debug/release mode from compiler assertions
+    let build_mode = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+
     // TODO: don't hardcore this
-    let kernel_binary = Path::new("target/x86_64-sabios/debug/sabios")
+    let kernel_binary = Path::new("target/x86_64-sabios")
+        .join(build_mode)
+        .join("sabios")
         .canonicalize()
         .unwrap();
+
+    eprintln!(
+        "use {} mode kernel executable: {}",
+        build_mode,
+        kernel_binary.display()
+    );
 
     // the path to the root of this crate, set by cargo
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -16,7 +31,7 @@ fn main() {
 
     let kernel_manifest = kernel_dir.join("Cargo.toml");
     // use the same target folder for building the bootloader
-    let target_dir = kernel_dir.join("target");
+    let target_dir = kernel_dir.join("target").join("bootloader").join(build_mode);
     // place the resulting disk image next to our kernel binary
     let out_dir = kernel_binary.parent().unwrap();
 

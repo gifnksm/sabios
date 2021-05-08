@@ -2,7 +2,7 @@
 #![no_main]
 
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
-use core::{mem, panic::PanicInfo};
+use core::mem;
 use framebuffer::{Color, Point};
 
 mod framebuffer;
@@ -37,7 +37,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     loop {}
 }
 
+#[cfg(not(test))]
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }

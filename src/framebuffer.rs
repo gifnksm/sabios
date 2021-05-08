@@ -28,6 +28,7 @@ impl Color {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Vector2d<T> {
     pub(crate) x: T,
     pub(crate) y: T,

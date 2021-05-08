@@ -13,6 +13,16 @@ Inspired by following great pioneers:
 [MikanOS]: https://github.com/uchan-nos/mikanos
 [@uchan-nos]: https://github.com/uchan-nos
 
+## Requirements
+
+Following tools are required:
+
+* [rustup]
+* [GNU Make]
+
+[rustup]: https://rustup.rs/
+[GNU Make]: https://www.gnu.org/software/make/
+
 ## License
 
 Licensed under either of

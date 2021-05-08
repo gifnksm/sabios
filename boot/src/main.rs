@@ -31,7 +31,10 @@ fn main() {
 
     let kernel_manifest = kernel_dir.join("Cargo.toml");
     // use the same target folder for building the bootloader
-    let target_dir = kernel_dir.join("target").join("bootloader").join(build_mode);
+    let target_dir = kernel_dir
+        .join("target")
+        .join("bootloader")
+        .join(build_mode);
     // place the resulting disk image next to our kernel binary
     let out_dir = kernel_binary.parent().unwrap();
 

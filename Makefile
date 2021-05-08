@@ -29,8 +29,8 @@ KERNEL_DEBUG := target/$(TARGET)/debug/sabios
 KERNEL_RELEASE := target/$(TARGET)/release/sabios
 
 # targets
-run-bios: qemu-bios-debug ## Run sabios BIOS disk image with QEMU (debug build)
-.PHONY: run-bios
+run-bios-debug: qemu-bios-debug ## Run sabios BIOS disk image with QEMU (debug build)
+.PHONY: run-bios-debug
 
 run-bios-release: qemu-bios-release ## Run sabios BIOS disk image with QEMU (release build)
 .PHONY: run-bios-release

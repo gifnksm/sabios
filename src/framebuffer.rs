@@ -46,7 +46,7 @@ static DRAWER: OnceCell<spin::Mutex<Drawer>> = OnceCell::uninit();
 
 pub(crate) fn init(framebuffer: FrameBuffer) {
     INFO.try_init_once(|| framebuffer.info())
-        .expect("faield to initialize INFO");
+        .expect("failed to initialize INFO");
     DRAWER
         .try_init_once(|| spin::Mutex::new(Drawer::new(framebuffer)))
         .expect("failed to initialize DRAWER");

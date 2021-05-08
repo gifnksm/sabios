@@ -17,10 +17,10 @@ Inspired by following great pioneers:
 
 ```console
 # Boot sabios with BIOS bootloader
-$ make run-bios
+$ make run-bios-release
 
 # Boot sabios with UEFI bootloader
-$ make run-uefi
+$ make run-uefi-release
 ```
 
 Other instructions are shown with `make help`.

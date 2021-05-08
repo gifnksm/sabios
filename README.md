@@ -13,15 +13,41 @@ Inspired by following great pioneers:
 [MikanOS]: https://github.com/uchan-nos/mikanos
 [@uchan-nos]: https://github.com/uchan-nos
 
+## Instructions
+
+```console
+# Boot sabios with BIOS bootloader
+$ make run-bios
+
+# Boot sabios with UEFI bootloader
+$ make run-uefi
+```
+
+Other instructions are shown with `make help`.
+
 ## Requirements
 
 Following tools are required:
 
 * [rustup]
 * [GNU Make]
+* [QEMU]
+* OVMF (for Arch Linux users, install [edk2-ovmf] package)
 
 [rustup]: https://rustup.rs/
 [GNU Make]: https://www.gnu.org/software/make/
+[QEMU]: https://www.qemu.org/
+[edk2-ovmf]: https://archlinux.org/packages/extra/any/edk2-ovmf/
+
+[Makefile] assumes that OVMF is installed in `/usr/share/OVMF/x64/OVMF.fd`.
+If it is installed in a different path in your environment, please specify the installation path as follow:
+
+```console
+$ make OVMF_FILE=/path/to/OVMF.fd
+...
+```
+
+[Makefile]: Makefile
 
 ## License
 

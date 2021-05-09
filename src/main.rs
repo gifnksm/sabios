@@ -27,10 +27,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         for p in rect.points() {
             drawer.draw(p, Color::GREEN).expect("failed to draw");
         }
-        font::draw_ascii(&mut *drawer, Point::new(50, 50), b'A', Color::BLACK, true)
-            .expect("failed to draw_ascii");
-        font::draw_ascii(&mut *drawer, Point::new(58, 50), b'A', Color::BLACK, true)
-            .expect("failed to draw_ascii");
+        for (i, ch) in (0..).zip(('!'..='~').chain('あ'..'お')) {
+            font::draw_char(&mut *drawer, Point::new(8 * i, 50), ch, Color::BLACK, false)
+                .expect("failed to draw_ascii");
+        }
     }
 
     loop {}

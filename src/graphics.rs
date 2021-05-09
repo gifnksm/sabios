@@ -1,4 +1,7 @@
-use core::convert::TryFrom;
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
+
+use core::{convert::TryFrom, fmt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Color {
@@ -22,6 +25,7 @@ impl Color {
     }
 
     pub(crate) fn to_grayscale(self) -> u8 {
+        #[allow(clippy::unwrap_used)] // this never panics
         u8::try_from((u16::from(self.r) + u16::from(self.g) + u16::from(self.b)) / 3).unwrap()
     }
 }
@@ -35,6 +39,12 @@ where
     fn try_from((r, g, b): (T, T, T)) -> Result<Self, Self::Error> {
         let (r, g, b) = (u8::try_from(r)?, u8::try_from(g)?, u8::try_from(b)?);
         Ok(Self { r, g, b })
+    }
+}
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
 
@@ -59,6 +69,15 @@ where
     fn try_from((x, y): (U, U)) -> Result<Self, Self::Error> {
         let (x, y) = (T::try_from(x)?, T::try_from(y)?);
         Ok(Self { x, y })
+    }
+}
+
+impl<T> fmt::Display for Vector2d<T>
+where
+    T: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
     }
 }
 

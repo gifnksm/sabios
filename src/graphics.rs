@@ -1,7 +1,11 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
 
-use core::{convert::TryFrom, fmt};
+use core::{
+    convert::TryFrom,
+    fmt, iter,
+    ops::{Add, Range},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Color {
@@ -82,3 +86,69 @@ where
 }
 
 pub(crate) type Point<T> = Vector2d<T>;
+pub(crate) type Size<T> = Vector2d<T>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Rectangle<T> {
+    pub(crate) pos: Point<T>,
+    pub(crate) size: Size<T>,
+}
+
+impl<T> Rectangle<T> {
+    pub(crate) fn new(pos: Point<T>, size: Size<T>) -> Self {
+        Self { pos, size }
+    }
+}
+
+impl<T> Rectangle<T>
+where
+    T: Copy + Add<Output = T>,
+{
+    pub(crate) fn x_range(&self) -> Range<T> {
+        self.pos.x..(self.pos.x + self.size.x)
+    }
+
+    pub(crate) fn y_range(&self) -> Range<T> {
+        self.pos.y..(self.pos.y + self.size.y)
+    }
+}
+
+impl<T> Rectangle<T>
+where
+    T: Copy + Add<Output = T> + PartialOrd,
+{
+    pub(crate) fn contains(&self, p: &Point<T>) -> bool {
+        self.x_range().contains(&p.x) && self.y_range().contains(&p.y)
+    }
+}
+
+impl<T> Rectangle<T>
+where
+    T: Copy + Add<Output = T>,
+    Range<T>: Iterator<Item = T>,
+{
+    pub(crate) fn points(self) -> impl Iterator<Item = Point<T>> {
+        self.x_range()
+            .flat_map(move |x| iter::repeat(x).zip(self.y_range()))
+            .map(|(x, y)| Point::new(x, y))
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum DrawError {
+    PointOutOfArea(Point<i32>),
+}
+
+impl fmt::Display for DrawError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DrawError::PointOutOfArea(p) => write!(f, "point out of drawing area: {}", p),
+        }
+    }
+}
+
+pub(crate) trait Draw {
+    fn area(&self) -> Rectangle<i32>;
+    fn draw(&mut self, p: Point<i32>, c: Color) -> Result<(), DrawError>;
+}
+static_assertions::assert_obj_safe!(Draw);

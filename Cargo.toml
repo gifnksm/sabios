@@ -17,3 +17,4 @@ panic = "abort"
 bootloader = "0.10.3"
 conquer-once = {version = "0.3.2", default-features = false}
 spin = "0.9.0"
+static_assertions = "1.1.0"

@@ -59,7 +59,7 @@ pub(crate) struct Vector2d<T> {
 }
 
 impl<T> Vector2d<T> {
-    pub(crate) fn new(x: T, y: T) -> Self {
+    pub(crate) const fn new(x: T, y: T) -> Self {
         Self { x, y }
     }
 }
@@ -95,7 +95,7 @@ pub(crate) struct Rectangle<T> {
 }
 
 impl<T> Rectangle<T> {
-    pub(crate) fn new(pos: Point<T>, size: Size<T>) -> Self {
+    pub(crate) const fn new(pos: Point<T>, size: Size<T>) -> Self {
         Self { pos, size }
     }
 }
@@ -144,6 +144,21 @@ impl fmt::Display for DrawError {
         match self {
             DrawError::PointOutOfArea(p) => write!(f, "point out of drawing area: {}", p),
         }
+    }
+}
+
+pub(crate) trait DrawErrorExt {
+    fn ignore_out_of_range(self, ignore: bool) -> Self;
+}
+
+impl DrawErrorExt for Result<(), DrawError> {
+    fn ignore_out_of_range(self, ignore: bool) -> Self {
+        if ignore {
+            if let Err(DrawError::PointOutOfArea(_)) = &self {
+                return Ok(());
+            }
+        }
+        self
     }
 }
 

@@ -34,18 +34,6 @@ impl Color {
     }
 }
 
-impl<T> TryFrom<(T, T, T)> for Color
-where
-    u8: TryFrom<T>,
-{
-    type Error = <u8 as TryFrom<T>>::Error;
-
-    fn try_from((r, g, b): (T, T, T)) -> Result<Self, Self::Error> {
-        let (r, g, b) = (u8::try_from(r)?, u8::try_from(g)?, u8::try_from(b)?);
-        Ok(Self { r, g, b })
-    }
-}
-
 impl fmt::Display for Color {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
@@ -61,18 +49,6 @@ pub(crate) struct Vector2d<T> {
 impl<T> Vector2d<T> {
     pub(crate) const fn new(x: T, y: T) -> Self {
         Self { x, y }
-    }
-}
-
-impl<T, U> TryFrom<(U, U)> for Vector2d<T>
-where
-    T: TryFrom<U>,
-{
-    type Error = T::Error;
-
-    fn try_from((x, y): (U, U)) -> Result<Self, Self::Error> {
-        let (x, y) = (T::try_from(x)?, T::try_from(y)?);
-        Ok(Self { x, y })
     }
 }
 
@@ -134,36 +110,14 @@ where
     }
 }
 
-#[derive(Debug)]
-pub(crate) enum DrawError {
-    PointOutOfArea(Point<i32>),
-}
-
-impl fmt::Display for DrawError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DrawError::PointOutOfArea(p) => write!(f, "point out of drawing area: {}", p),
-        }
-    }
-}
-
-pub(crate) trait DrawErrorExt {
-    fn ignore_out_of_range(self, ignore: bool) -> Self;
-}
-
-impl DrawErrorExt for Result<(), DrawError> {
-    fn ignore_out_of_range(self, ignore: bool) -> Self {
-        if ignore {
-            if let Err(DrawError::PointOutOfArea(_)) = &self {
-                return Ok(());
-            }
-        }
-        self
-    }
-}
-
 pub(crate) trait Draw {
     fn area(&self) -> Rectangle<i32>;
-    fn draw(&mut self, p: Point<i32>, c: Color) -> Result<(), DrawError>;
+    fn draw(&mut self, p: Point<i32>, c: Color);
+
+    fn fill_rect(&mut self, rect: Rectangle<i32>, c: Color) {
+        for p in rect.points() {
+            self.draw(p, c);
+        }
+    }
 }
 static_assertions::assert_obj_safe!(Draw);

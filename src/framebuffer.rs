@@ -1,7 +1,7 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
 
-use crate::graphics::{Color, Draw, DrawError, Point, Rectangle};
+use crate::graphics::{Color, Draw, Point, Rectangle};
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use conquer_once::{spin::OnceCell, TryGetError, TryInitError};
 use core::{convert::TryFrom, fmt};
@@ -113,11 +113,11 @@ impl Draw for Drawer {
         }
     }
 
-    fn draw(&mut self, p: Point<i32>, c: Color) -> Result<(), DrawError> {
-        let pixel_index = self.pixel_index(p).ok_or(DrawError::PointOutOfArea(p))?;
-        self.pixel_drawer
-            .pixel_draw(self.framebuffer.buffer_mut(), pixel_index, c);
-        Ok(())
+    fn draw(&mut self, p: Point<i32>, c: Color) {
+        if let Some(pixel_index) = self.pixel_index(p) {
+            self.pixel_drawer
+                .pixel_draw(self.framebuffer.buffer_mut(), pixel_index, c)
+        }
     }
 }
 

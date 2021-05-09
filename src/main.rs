@@ -2,12 +2,9 @@
 #![no_std]
 #![no_main]
 
-use self::{
-    console::Console,
-    graphics::{Color, Draw, Point, Rectangle, Size},
-};
+use self::graphics::{Color, Draw, Point, Rectangle, Size};
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
-use core::{fmt::Write, mem};
+use core::mem;
 
 mod console;
 mod font;
@@ -28,11 +25,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         drawer.fill_rect(screen_rect, Color::WHITE);
         let green_rect = Rectangle::new(Point::new(0, 0), Size::new(200, 100));
         drawer.fill_rect(green_rect, Color::GREEN);
+    }
 
-        let mut console = Console::new(&mut *drawer, Color::BLACK, Color::WHITE);
-        for i in 0..80 {
-            writeln!(&mut console, "line {}", i).expect("failed to draw");
-        }
+    for i in 0..27 {
+        println!("line {}", i);
     }
 
     loop {}

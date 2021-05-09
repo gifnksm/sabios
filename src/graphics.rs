@@ -4,7 +4,7 @@
 use core::{
     convert::TryFrom,
     fmt, iter,
-    ops::{Add, Range},
+    ops::{Add, Range, Sub},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,14 +78,46 @@ impl<T> Rectangle<T> {
 
 impl<T> Rectangle<T>
 where
+    T: Copy + Ord + Sub<Output = T>,
+{
+    pub(crate) fn from_points(p0: Point<T>, p1: Point<T>) -> Self {
+        let x_start = T::min(p0.x, p1.x);
+        let y_start = T::min(p0.y, p1.y);
+        let x_end = T::max(p0.x, p1.x);
+        let y_end = T::max(p0.y, p1.y);
+        Rectangle {
+            pos: Point::new(x_start, y_start),
+            size: Size::new(x_end - x_start, y_end - y_start),
+        }
+    }
+}
+
+impl<T> Rectangle<T>
+where
     T: Copy + Add<Output = T>,
 {
+    pub(crate) fn x_start(&self) -> T {
+        self.pos.x
+    }
+
+    pub(crate) fn y_start(&self) -> T {
+        self.pos.y
+    }
+
+    pub(crate) fn x_end(&self) -> T {
+        self.pos.x + self.size.x
+    }
+
+    pub(crate) fn y_end(&self) -> T {
+        self.pos.y + self.size.y
+    }
+
     pub(crate) fn x_range(&self) -> Range<T> {
-        self.pos.x..(self.pos.x + self.size.x)
+        self.x_start()..self.x_end()
     }
 
     pub(crate) fn y_range(&self) -> Range<T> {
-        self.pos.y..(self.pos.y + self.size.y)
+        self.y_start()..self.y_end()
     }
 }
 
@@ -95,6 +127,22 @@ where
 {
     pub(crate) fn contains(&self, p: &Point<T>) -> bool {
         self.x_range().contains(&p.x) && self.y_range().contains(&p.y)
+    }
+}
+
+impl<T> Rectangle<T>
+where
+    T: Copy + Add<Output = T> + Sub<Output = T> + Ord,
+{
+    pub(crate) fn extend_to_contain(&self, p: Point<T>) -> Rectangle<T> {
+        let x_start = T::min(p.x, self.x_start());
+        let y_start = T::min(p.y, self.y_start());
+        let x_end = T::max(p.x, self.x_end());
+        let y_end = T::max(p.y, self.y_end());
+        Rectangle {
+            pos: Point::new(x_start, y_start),
+            size: Size::new(x_end - x_start, y_end - y_start),
+        }
     }
 }
 

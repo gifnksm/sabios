@@ -96,6 +96,11 @@ pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>, AccessE
     Ok(DRAWER.try_get()?.lock())
 }
 
+pub(crate) fn try_lock_drawer() -> Result<Option<spin::MutexGuard<'static, Drawer>>, AccessError> {
+    // TODO: consider interrupts
+    Ok(DRAWER.try_get()?.try_lock())
+}
+
 pub(crate) struct Drawer {
     framebuffer: FrameBuffer,
     width: i32,

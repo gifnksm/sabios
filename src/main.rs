@@ -3,9 +3,10 @@
 
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
-use framebuffer::{Color, Point};
+use graphics::Color;
 
 mod framebuffer;
+mod graphics;
 
 entry_point!(kernel_main);
 
@@ -19,17 +20,17 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let mut drawer = framebuffer::lock_drawer();
         for x in drawer.x_range() {
             for y in drawer.y_range() {
-                drawer.draw(Point::new(x, y), Color::WHITE);
+                drawer.draw((x, y), Color::WHITE);
             }
         }
         for x in drawer.x_range() {
             for y in drawer.y_range() {
-                drawer.draw(Point::new(x, y), Color::BLACK);
+                drawer.draw((x, y), Color::BLACK);
             }
         }
         for x in 0..200 {
             for y in 0..100 {
-                drawer.draw(Point::new(x, y), Color::GREEN);
+                drawer.draw((x, y), Color::GREEN);
             }
         }
     }

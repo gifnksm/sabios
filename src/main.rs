@@ -3,7 +3,8 @@
 #![no_main]
 
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
-use core::mem;
+use core::{fmt::Write, mem};
+use font::StringDrawer;
 use graphics::{Color, Draw, Point, Rectangle, Size};
 
 mod font;
@@ -28,9 +29,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             drawer.draw(p, Color::GREEN).expect("failed to draw");
         }
         for (i, ch) in (0..).zip(('!'..='~').chain('あ'..'お')) {
-            font::draw_char(&mut *drawer, Point::new(8 * i, 50), ch, Color::BLACK, false)
+            font::draw_char(&mut *drawer, Point::new(8 * i, 50), ch, Color::BLACK, true)
                 .expect("failed to draw_ascii");
         }
+        font::draw_string(
+            &mut *drawer,
+            Point::new(0, 66),
+            "Hello, world!",
+            Color::BLACK,
+            false,
+        )
+        .expect("failed to draw");
+        let mut string_drawer =
+            StringDrawer::new(&mut *drawer, Point::new(0, 82), Color::BLACK, false);
+        write!(string_drawer, "1 + 2 = {}", 1 + 2).expect("failed to draw");
     }
 
     loop {}

@@ -1,5 +1,5 @@
 use crate::graphics::{Color, Draw, DrawError, DrawErrorExt, Point, Rectangle, Size};
-use core::convert::TryFrom;
+use core::{convert::TryFrom, fmt};
 
 const FONT_SIZE_I32: Size<i32> = Size::new(8, 16);
 const FONT_SIZE: Size<usize> = Size::new(8, 16);
@@ -42,4 +42,66 @@ where
     }
 
     Ok(())
+}
+
+pub(crate) fn draw_string<D>(
+    drawer: &mut D,
+    pos: Point<i32>,
+    s: &str,
+    color: Color,
+    ignore_out_of_range: bool,
+) -> Result<(), DrawError>
+where
+    D: Draw,
+{
+    let mut pos = pos;
+    for ch in s.chars() {
+        draw_char(drawer, pos, ch, color, ignore_out_of_range)?;
+        pos.x += FONT_SIZE_I32.x;
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+pub(crate) struct StringDrawer<'d, D> {
+    drawer: &'d mut D,
+    pos: Point<i32>,
+    color: Color,
+    ignore_out_of_range: bool,
+}
+
+impl<'d, D> StringDrawer<'d, D> {
+    pub(crate) fn new(
+        drawer: &'d mut D,
+        start_pos: Point<i32>,
+        color: Color,
+        ignore_out_of_range: bool,
+    ) -> Self {
+        Self {
+            drawer,
+            pos: start_pos,
+            color,
+            ignore_out_of_range,
+        }
+    }
+}
+
+impl<'d, D> fmt::Write for StringDrawer<'d, D>
+where
+    D: Draw,
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for ch in s.chars() {
+            draw_char(
+                self.drawer,
+                self.pos,
+                ch,
+                self.color,
+                self.ignore_out_of_range,
+            )
+            .map_err(|_| fmt::Error)?;
+            self.pos.x += FONT_SIZE_I32.x;
+        }
+        Ok(())
+    }
 }

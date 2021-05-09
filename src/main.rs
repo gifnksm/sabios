@@ -31,11 +31,18 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         println!("line {}", i);
     }
 
-    loop {}
+    hlt_loop();
+}
+
+fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 #[cfg(not(test))]
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    println!("{}", info);
+    hlt_loop();
 }

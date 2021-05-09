@@ -7,6 +7,22 @@ SHELL := bash
 MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 
+
+# goals declaration
+run-bios-debug:       ## Run sabios BIOS disk image with QEMU (debug build)
+run-bios-release:     ## Run sabios BIOS disk image with QEMU (release build)
+run-uefi-debug:       ## Run sabios UEFI disk image with QEMU (debug build)
+run-uefi-release:     ## Run sabios UEFI disk image with QEMU (release build)
+build-debug:          ## Build all artifacts (debug build)
+build-release:        ## Build all artifacts (release build)
+build-image-debug:    ## Build sabios BIOS/UEFI disk image (debug build)
+build-image-release:  ## Build saibos BIOS/UEFI disk image (release build)
+build-kernel-debug:   ## Build sabios kernel executable (debug build)
+build-kernel-release: ## Build sabios kernel executable (release build)
+clean:                ## Clean build directory
+help:                 ## Show this help message
+
+
 # commands
 CARGO := cargo
 QEMU  := qemu-system-x86_64
@@ -29,54 +45,40 @@ UEFI_PARTITION_RELEASE  := target/$(TARGET)/release/boot-uefi-sabios.fat
 KERNEL_DEBUG   := target/$(TARGET)/debug/sabios
 KERNEL_RELEASE := target/$(TARGET)/release/sabios
 
-# targets
-run-bios-debug: qemu-bios-debug ## Run sabios BIOS disk image with QEMU (debug build)
-.PHONY: run-bios-debug
-run-bios-release: qemu-bios-release ## Run sabios BIOS disk image with QEMU (release build)
-.PHONY: run-bios-release
 
-run-uefi-debug: qemu-uefi-debug ## Run sabios UEFI disk image with QEMU (debug build)
-.PHONY: run-uefi
-run-uefi-release: qemu-uefi-release ## Run sabios UEFI disk image with QEMU (release build)
-.PHONY: run-uefi-release
+# goald definition
+run-bios-debug:   qemu-bios-debug
+run-bios-release: qemu-bios-release
+.PHONY: run-bios-debug run-bios-release
 
-build-debug: ## Build all artifacts (debug build)
-.PHONY: build-debug
-build-release: ## Build all artifacts (release build)
-.PHONY: build-release
+run-uefi-debug:   qemu-uefi-debug
+run-uefi-release: qemu-uefi-release
+.PHONY: run-uefi-debug run-uefi-release
 
-build-image-bios-debug: $(BIOS_IMAGE_DEBUG) ## Build saibos BIOS disk image (debug build)
-.PHONY: build-image-bios-debug
-build-debug: build-image-bios-debug
-build-image-bios-release: $(BIOS_IMAGE_RELEASE) ## Build saibos BIOS disk image (release build)
-.PHONY: build-image-bios-release
-build-release: build-image-bios-release
+build-debug:   build-image-debug   build-kernel-debug
+build-release: build-image-release build-image-release
+.PHONY: build-debug build-release
 
-build-image-uefi-debug: $(UEFI_IMAGE_DEBUG) ## Build sabios UEFI disk image (debug build)
-.PHONY: build-image-uefi-debug
-build-debug: build-image-uefi-debug
-build-image-uefi-release: $(UEFI_IMAGE_RELEASE) ## Build sabios UEFI disk image (release build)
-.PHONY: build-image-uefi-release
-build-release: build-image-uefi-release
+build-image-debug:   $(BIOS_IMAGE_DEBUG)   $(UEFI_IMAGE_DEBUG)
+build-image-release: $(BIOS_IMAGE_RELEASE) $(UEFI_IMAGE_RELEASE)
+.PHONY: build-image-debug
+.PHONY: build-image-elease
 
-build-kernel-debug: $(KERNEL_DEBUG) ## Build sabios kernel executable (debug build)
+build-kernel-debug:   $(KERNEL_DEBUG)
+build-kernel-release: $(KERNEL_RELEASE)
 .PHONY: build-kernel-debug
-build-debug: build-kernel-debug
-build-kernel-release: $(KERNEL_RELEASE) ## Build sabios kernel executable (release build)
 .PHONY: build-kernel-release
-build-release: build-kernel-release
 
-clean: ## Clean build directory
-	cargo clean
+clean: cargo-clean
 .PHONY: clean
 
-help: ## Show this help message
+help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "} {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 .PHONY: help
 
 # commands
-qemu-bios-debug:   BIOS_IMAGE=$(BIOS_IMAGE_DEBUG)
-qemu-bios-release: BIOS_IMAGE=$(BIOS_IMAGE_RELEASE)
+qemu-bios-debug:   BIOS_IMAGE:=$(BIOS_IMAGE_DEBUG)
+qemu-bios-release: BIOS_IMAGE:=$(BIOS_IMAGE_RELEASE)
 qemu-bios-%: cargo-run-boot-%
 	$(QEMU) -drive format=raw,file=$(BIOS_IMAGE)
 
@@ -101,6 +103,9 @@ cargo-build-sabios-%:
 	    -Z build-std-features=compiler-builtins-mem
 .PHONY: cargo-build-sabios-%
 
+cargo-clean:
+	cargo clean
+.PHONY: cargo-clean
 
 # files
 $(BIOS_IMAGE_DEBUG):        cargo-run-boot-debug
@@ -112,6 +117,6 @@ $(UEFI_EXECUTABLE_RELEASE): cargo-run-boot-release
 $(UEFI_PARTITION_DEBUG):    cargo-run-boot-debug
 $(UEFI_PARTITION_RELEASE):  cargo-run-boot-release
 
-$(KERNEL_DEBUG): cargo-build-sabios-debug
+$(KERNEL_DEBUG):   cargo-build-sabios-debug
 $(KERNEL_RELEASE): cargo-build-sabios-release
 

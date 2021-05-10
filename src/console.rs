@@ -2,7 +2,7 @@
 #![warn(clippy::expect_used)]
 
 use crate::{
-    font, framebuffer,
+    desktop, font, framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
 };
 use core::{convert::TryFrom, fmt};
@@ -35,8 +35,8 @@ const COLUMNS: usize = 80;
 
 static CONSOLE: spin::Mutex<Console> = spin::Mutex::new(Console {
     buffer: [[0; COLUMNS]; ROWS],
-    fg_color: Color::BLACK,
-    bg_color: Color::WHITE,
+    fg_color: desktop::FG_COLOR,
+    bg_color: desktop::BG_COLOR,
     cursor: Point::new(0, 0),
 });
 

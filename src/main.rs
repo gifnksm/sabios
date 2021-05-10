@@ -2,14 +2,15 @@
 #![no_std]
 #![no_main]
 
-use self::graphics::{Color, Draw, Point, Rectangle, Size};
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 
 mod console;
+mod desktop;
 mod font;
 mod framebuffer;
 mod graphics;
+mod mouse;
 
 entry_point!(kernel_main);
 
@@ -19,17 +20,11 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         .expect("framebuffer not supported");
     framebuffer::init(framebuffer).expect("failed to initialize framebuffer");
 
-    {
-        let mut drawer = framebuffer::lock_drawer().expect("failed to get framebuffer");
-        let screen_rect = drawer.area();
-        drawer.fill_rect(screen_rect, Color::WHITE);
-        let green_rect = Rectangle::new(Point::new(0, 0), Size::new(200, 100));
-        drawer.fill_rect(green_rect, Color::GREEN);
-    }
+    desktop::draw().expect("failed to draw desktop");
 
-    for i in 0..27 {
-        println!("line {}", i);
-    }
+    println!("Welcome to sabios!");
+
+    mouse::draw_cursor().expect("failed to draw mouse cursor");
 
     hlt_loop();
 }

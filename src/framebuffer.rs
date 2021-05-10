@@ -6,7 +6,7 @@ use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use conquer_once::{spin::OnceCell, TryGetError, TryInitError};
 use core::{convert::TryFrom, fmt};
 
-static INFO: OnceCell<FrameBufferInfo> = OnceCell::uninit();
+static INFO: OnceCell<ScreenInfo> = OnceCell::uninit();
 static DRAWER: OnceCell<spin::Mutex<Drawer>> = OnceCell::uninit();
 
 #[derive(Debug)]
@@ -40,21 +40,16 @@ impl fmt::Display for InitError {
 }
 
 pub(crate) fn init(framebuffer: FrameBuffer) -> Result<(), InitError> {
-    let info = framebuffer.info();
-    let pixel_format = info.pixel_format;
+    let original_info = framebuffer.info();
+    let pixel_format = original_info.pixel_format;
     let pixel_drawer =
         select_pixel_drawer(pixel_format).ok_or(InitError::UnsupportedPixelFormat(pixel_format))?;
 
-    fn usize_to_i32(name: &'static str, value: usize) -> Result<i32, InitError> {
-        i32::try_from(value).map_err(|_e| InitError::ParameterTooLarge(name, value))
-    }
+    let info = ScreenInfo::new(&original_info)?;
 
     let drawer = Drawer {
         framebuffer,
-        width: usize_to_i32("horizontal_resolution", info.horizontal_resolution)?,
-        height: usize_to_i32("vertical_resolution", info.vertical_resolution)?,
-        stride: usize_to_i32("stride", info.stride)?,
-        bytes_per_pixel: usize_to_i32("byte_per_pixel", info.bytes_per_pixel)?,
+        info,
         pixel_drawer,
     };
 
@@ -87,7 +82,7 @@ impl From<TryGetError> for AccessError {
     }
 }
 
-pub(crate) fn info() -> Result<&'static FrameBufferInfo, AccessError> {
+pub(crate) fn info() -> Result<&'static ScreenInfo, AccessError> {
     Ok(INFO.try_get()?)
 }
 
@@ -101,12 +96,32 @@ pub(crate) fn try_lock_drawer() -> Result<Option<spin::MutexGuard<'static, Drawe
     Ok(DRAWER.try_get()?.try_lock())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ScreenInfo {
+    pub(crate) width: i32,
+    pub(crate) height: i32,
+    pub(crate) stride: i32,
+    pub(crate) bytes_per_pixel: i32,
+}
+
+impl ScreenInfo {
+    fn new(info: &FrameBufferInfo) -> Result<Self, InitError> {
+        fn usize_to_i32(name: &'static str, value: usize) -> Result<i32, InitError> {
+            i32::try_from(value).map_err(|_e| InitError::ParameterTooLarge(name, value))
+        }
+
+        Ok(Self {
+            width: usize_to_i32("horizontal_resolution", info.horizontal_resolution)?,
+            height: usize_to_i32("vertical_resolution", info.vertical_resolution)?,
+            stride: usize_to_i32("stride", info.stride)?,
+            bytes_per_pixel: usize_to_i32("byte_per_pixel", info.bytes_per_pixel)?,
+        })
+    }
+}
+
 pub(crate) struct Drawer {
     framebuffer: FrameBuffer,
-    width: i32,
-    height: i32,
-    stride: i32,
-    bytes_per_pixel: i32,
+    info: ScreenInfo,
     pixel_drawer: &'static (dyn PixelDraw + Send + Sync),
 }
 
@@ -114,7 +129,7 @@ impl Draw for Drawer {
     fn area(&self) -> crate::graphics::Rectangle<i32> {
         Rectangle {
             pos: Point::new(0i32, 0i32),
-            size: Point::new(self.width, self.height),
+            size: Point::new(self.info.width, self.info.height),
         }
     }
 
@@ -131,7 +146,7 @@ impl Drawer {
         if !self.area().contains(&p) {
             return None;
         }
-        usize::try_from((p.y * self.stride + p.x) * self.bytes_per_pixel).ok()
+        usize::try_from((p.y * self.info.stride + p.x) * self.info.bytes_per_pixel).ok()
     }
 }
 

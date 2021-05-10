@@ -1,6 +1,3 @@
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-
 use crate::{
     desktop, font, framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},

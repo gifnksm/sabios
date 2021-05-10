@@ -1,6 +1,3 @@
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-
 use core::{
     convert::TryFrom,
     fmt, iter,

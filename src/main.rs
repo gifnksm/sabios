@@ -1,4 +1,6 @@
 #![warn(unsafe_op_in_unsafe_fn)]
+#![warn(clippy::unwrap_used)]
+#![warn(clippy::expect_used)]
 #![no_std]
 #![no_main]
 
@@ -17,6 +19,7 @@ mod pci;
 
 entry_point!(kernel_main);
 
+#[allow(clippy::expect_used)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
         .into_option()

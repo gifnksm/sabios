@@ -1,6 +1,3 @@
-#![warn(clippy::unwrap_used)]
-#![warn(clippy::expect_used)]
-
 use crate::{
     graphics::{Color, Draw, Point, Rectangle},
     make_error, Error, ErrorKind,

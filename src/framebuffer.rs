@@ -1,7 +1,10 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
 
-use crate::graphics::{Color, Draw, Point, Rectangle};
+use crate::{
+    graphics::{Color, Draw, Point, Rectangle},
+    make_error, Error, ErrorKind,
+};
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use conquer_once::{spin::OnceCell, TryGetError, TryInitError};
 use core::{convert::TryFrom, fmt};
@@ -58,42 +61,35 @@ pub(crate) fn init(framebuffer: FrameBuffer) -> Result<(), InitError> {
     Ok(())
 }
 
-#[derive(Debug)]
-pub(crate) enum AccessError {
-    Uninit,
-    WouldBlock,
+trait ResultExt {
+    type Output;
+    fn convert_err(self) -> Self::Output;
 }
 
-impl fmt::Display for AccessError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            AccessError::Uninit => write!(f, "framebuffer is uninitialized"),
-            AccessError::WouldBlock => write!(f, "framebuffer is currently being initialized"),
-        }
+impl<T> ResultExt for Result<T, TryGetError> {
+    type Output = Result<T, Error>;
+
+    #[track_caller]
+    fn convert_err(self) -> Self::Output {
+        self.map_err(|err| match err {
+            TryGetError::Uninit => make_error!(ErrorKind::Uninit("framebuffer")),
+            TryGetError::WouldBlock => make_error!(ErrorKind::WouldBlock("framebuffer")),
+        })
     }
 }
 
-impl From<TryGetError> for AccessError {
-    fn from(err: TryGetError) -> Self {
-        match err {
-            TryGetError::Uninit => Self::Uninit,
-            TryGetError::WouldBlock => Self::WouldBlock,
-        }
-    }
+pub(crate) fn info() -> Result<&'static ScreenInfo, Error> {
+    INFO.try_get().convert_err()
 }
 
-pub(crate) fn info() -> Result<&'static ScreenInfo, AccessError> {
-    Ok(INFO.try_get()?)
-}
-
-pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>, AccessError> {
+pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>, Error> {
     // TODO: consider interrupts
-    Ok(DRAWER.try_get()?.lock())
+    Ok(DRAWER.try_get().convert_err()?.lock())
 }
 
-pub(crate) fn try_lock_drawer() -> Result<Option<spin::MutexGuard<'static, Drawer>>, AccessError> {
+pub(crate) fn try_lock_drawer() -> Result<Option<spin::MutexGuard<'static, Drawer>>, Error> {
     // TODO: consider interrupts
-    Ok(DRAWER.try_get()?.try_lock())
+    Ok(DRAWER.try_get().convert_err()?.try_lock())
 }
 
 #[derive(Debug, Clone, Copy)]

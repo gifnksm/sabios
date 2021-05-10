@@ -1,12 +1,13 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
+    Result,
 };
 
 pub(crate) const BG_COLOR: Color = Color::new(45, 118, 237);
 pub(crate) const FG_COLOR: Color = Color::WHITE;
 
-pub(crate) fn draw() -> Result<(), framebuffer::AccessError> {
+pub(crate) fn draw() -> Result<()> {
     let screen = *framebuffer::info()?;
     let mut drawer = framebuffer::lock_drawer().expect("failed to get framebuffer");
     drawer.fill_rect(

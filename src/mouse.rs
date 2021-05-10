@@ -1,6 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point},
+    Result,
 };
 
 const MOUSE_CURSOR_WIDTH: usize = 15;
@@ -33,7 +34,7 @@ const MOUSE_CURSOR_SHAPE: [[u8; MOUSE_CURSOR_WIDTH]; MOUSE_CURSOR_HEIGHT] = [
     *b"         @@@   ",
 ];
 
-pub(crate) fn draw_cursor() -> Result<(), framebuffer::AccessError> {
+pub(crate) fn draw_cursor() -> Result<()> {
     let mut drawer = framebuffer::lock_drawer()?;
     for (dy, row) in (0..).zip(MOUSE_CURSOR_SHAPE) {
         for (dx, ch) in (0..).zip(row) {

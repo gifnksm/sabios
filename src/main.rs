@@ -2,15 +2,18 @@
 #![no_std]
 #![no_main]
 
+use self::error::{Error, ErrorKind, Result};
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 
 mod console;
 mod desktop;
+mod error;
 mod font;
 mod framebuffer;
 mod graphics;
 mod mouse;
+mod pci;
 
 entry_point!(kernel_main);
 
@@ -25,6 +28,12 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     println!("Welcome to sabios!");
 
     mouse::draw_cursor().expect("failed to draw mouse cursor");
+
+    let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
+
+    for device in &devices {
+        println!("{}", device);
+    }
 
     hlt_loop();
 }

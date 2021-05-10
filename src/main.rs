@@ -35,6 +35,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         println!("{}", device);
     }
 
+    Err::<(), _>(make_error!(ErrorKind::Uninit("test test test"))).expect("test");
+
     hlt_loop();
 }
 

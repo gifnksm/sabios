@@ -83,11 +83,12 @@ impl Console {
                 continue;
             }
 
-            if self.cursor.x < COLUMNS - 1 {
-                redraw.add(self.cursor);
-                self.buffer[self.cursor.y][self.cursor.x] = byte;
-                self.cursor.x += 1;
+            if self.cursor.x >= COLUMNS - 1 {
+                self.newline(&mut redraw);
             }
+            redraw.add(self.cursor);
+            self.buffer[self.cursor.y][self.cursor.x] = byte;
+            self.cursor.x += 1;
         }
         redraw
     }

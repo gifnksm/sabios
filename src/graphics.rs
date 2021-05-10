@@ -6,6 +6,7 @@ use core::{
     fmt, iter,
     ops::{Add, Range, Sub},
 };
+use num_traits::One;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Color {
@@ -132,13 +133,13 @@ where
 
 impl<T> Rectangle<T>
 where
-    T: Copy + Add<Output = T> + Sub<Output = T> + Ord,
+    T: Copy + Add<Output = T> + Sub<Output = T> + Ord + One,
 {
     pub(crate) fn extend_to_contain(&self, p: Point<T>) -> Rectangle<T> {
         let x_start = T::min(p.x, self.x_start());
         let y_start = T::min(p.y, self.y_start());
-        let x_end = T::max(p.x, self.x_end());
-        let y_end = T::max(p.y, self.y_end());
+        let x_end = T::max(p.x + One::one(), self.x_end());
+        let y_end = T::max(p.y + One::one(), self.y_end());
         Rectangle {
             pos: Point::new(x_start, y_start),
             size: Size::new(x_end - x_start, y_end - y_start),

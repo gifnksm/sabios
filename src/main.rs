@@ -4,7 +4,7 @@
 #![no_std]
 #![no_main]
 
-use self::error::{Error, ErrorKind, Result};
+use self::prelude::*;
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 
@@ -14,13 +14,18 @@ mod error;
 mod font;
 mod framebuffer;
 mod graphics;
+mod log;
 mod mouse;
 mod pci;
+mod prelude;
+mod xhc;
 
 entry_point!(kernel_main);
 
 #[allow(clippy::expect_used)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
+    log::set_level(log::Level::Debug);
+
     let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
         .into_option()
         .expect("framebuffer not supported");
@@ -33,12 +38,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     mouse::draw_cursor().expect("failed to draw mouse cursor");
 
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
-
     for device in &devices {
-        println!("{}", device);
+        debug!("{}", device);
     }
-
-    Err::<(), _>(make_error!(ErrorKind::Uninit("test test test"))).expect("test");
+    xhc::init(&devices).expect("failed to initialize xHC");
 
     hlt_loop();
 }
@@ -52,6 +55,6 @@ fn hlt_loop() -> ! {
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("{}", info);
+    error!("{}", info);
     hlt_loop();
 }

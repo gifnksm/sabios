@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point},
-    Result,
+    prelude::*,
 };
 
 const MOUSE_CURSOR_WIDTH: usize = 15;

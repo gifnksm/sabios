@@ -38,6 +38,8 @@ pub(crate) enum ErrorKind {
     Uninit(&'static str),
     WouldBlock(&'static str),
     Full,
+    XhcNotFound,
+    IndexOutOfRange,
 }
 
 impl fmt::Display for ErrorKind {
@@ -48,6 +50,7 @@ impl fmt::Display for ErrorKind {
                 write!(f, "{} is currently being initialized", target)
             }
             ErrorKind::Full => write!(f, "buffer full"),
+            _ => write!(f, "{:?}", self),
         }
     }
 }

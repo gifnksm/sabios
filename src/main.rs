@@ -33,12 +33,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     desktop::draw().expect("failed to draw desktop");
 
-    let physical_memory_offset = boot_info
-        .physical_memory_offset
-        .as_ref()
-        .copied()
-        .expect("physical memory is not mapped");
-
     println!("Welcome to sabios!");
 
     mouse::draw_cursor().expect("failed to draw mouse cursor");
@@ -47,7 +41,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     for device in &devices {
         debug!("{}", device);
     }
-    xhc::init(&devices, physical_memory_offset).expect("failed to initialize xHC");
+    xhc::init(&devices).expect("failed to initialize xHC");
 
     hlt_loop();
 }

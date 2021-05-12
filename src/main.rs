@@ -10,6 +10,7 @@ use bootloader::{
     entry_point, BootInfo,
 };
 use core::mem;
+use x86_64::{structures::paging::Translate, VirtAddr};
 
 mod console;
 mod desktop;
@@ -17,12 +18,21 @@ mod error;
 mod font;
 mod framebuffer;
 mod graphics;
+mod memory;
 mod mouse;
 mod paging;
 mod pci;
 
 struct MemoryRegions<'a> {
     regions: core::slice::Iter<'a, MemoryRegion>,
+}
+
+impl<'a> MemoryRegions<'a> {
+    fn new(regions: &'a [MemoryRegion]) -> Self {
+        Self {
+            regions: regions.iter(),
+        }
+    }
 }
 
 impl<'a> Iterator for MemoryRegions<'a> {
@@ -79,9 +89,12 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     println!("Welcome to sabios!");
 
-    for region in (MemoryRegions {
-        regions: boot_info.memory_regions.iter(),
-    }) {
+    let mut allocator = memory::lock_memory_manager();
+    allocator
+        .init(MemoryRegions::new(&*boot_info.memory_regions))
+        .expect("failed to initialize bitmap memory manager");
+
+    for region in MemoryRegions::new(&*boot_info.memory_regions) {
         println!(
             "addr={:08x}-{:08x}, pages = {:08x}, kind = {:?}",
             region.start,
@@ -89,6 +102,18 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             (region.end - region.start) / 4096,
             region.kind,
         );
+    }
+
+    {
+        let frames1 = allocator.allocate(3).expect("failed to allocate");
+        println!("allocated: {:?}", frames1);
+        let frames2 = allocator.allocate(5).expect("failed to allocate");
+        println!("allocated: {:?}", frames2);
+        allocator.free(frames1);
+        let frames3 = allocator.allocate(4).expect("failed to allocate");
+        println!("allocated: {:?}", frames3);
+        let frames4 = allocator.allocate(3).expect("failed to allocate");
+        println!("allocated: {:?}", frames4);
     }
 
     mouse::draw_cursor().expect("failed to draw mouse cursor");

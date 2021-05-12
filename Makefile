@@ -77,15 +77,20 @@ help:
 .PHONY: help
 
 # commands
+QEMU_OPTS =
+ifdef QEMU_DEBUG
+    QEMU_OPTS += -d int --no-reboot --no-shutdown
+endif
+
 qemu-bios-debug:   BIOS_IMAGE:=$(BIOS_IMAGE_DEBUG)
 qemu-bios-release: BIOS_IMAGE:=$(BIOS_IMAGE_RELEASE)
 qemu-bios-%: cargo-run-boot-%
-	$(QEMU) -drive format=raw,file=$(BIOS_IMAGE)
+	$(QEMU) -drive format=raw,file=$(BIOS_IMAGE) $(QEMU_OPTS)
 
 qemu-uefi-debug:   UEFI_IMAGE:=$(UEFI_IMAGE_DEBUG)
 qemu-uefi-release: UEFI_IMAGE:=$(UEFI_IMAGE_RELEASE)
 qemu-uefi-%: cargo-run-boot-% | $(OVMF_FILE)
-	$(QEMU) -drive format=raw,file=$(UEFI_IMAGE) -bios $(OVMF_FILE)
+	$(QEMU) -drive format=raw,file=$(UEFI_IMAGE) -bios $(OVMF_FILE) $(QEMU_OPTS)
 
 %-debug:   CARGO_BUILD_MODE_OPTIONS:=
 %-release: CARGO_BUILD_MODE_OPTIONS:=--release

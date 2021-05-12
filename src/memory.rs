@@ -1,11 +1,8 @@
-use crate::{
-    bail,
-    error::{ErrorKind, Result},
-};
+use crate::prelude::*;
 use bootloader::boot_info::{MemoryRegion, MemoryRegionKind};
 use core::cmp;
 use x86_64::{
-    structures::paging::{frame::PhysFrameRange, page::AddressNotAligned, PhysFrame},
+    structures::paging::{frame::PhysFrameRange, FrameAllocator, PhysFrame, Size4KiB},
     PhysAddr,
 };
 
@@ -49,10 +46,7 @@ pub(crate) fn lock_memory_manager() -> spin::MutexGuard<'static, BitmapMemoryMan
 }
 
 impl BitmapMemoryManager {
-    pub(crate) fn init(
-        &mut self,
-        regions: impl IntoIterator<Item = MemoryRegion>,
-    ) -> core::result::Result<(), AddressNotAligned> {
+    pub(crate) fn init(&mut self, regions: impl IntoIterator<Item = MemoryRegion>) -> Result<()> {
         let mut available_start = self.range.start;
         let mut available_end = self.range.end;
         for region in regions {
@@ -122,5 +116,11 @@ impl BitmapMemoryManager {
         } else {
             self.alloc_map[line_index] &= !(1 << bit_index);
         }
+    }
+}
+
+unsafe impl FrameAllocator<Size4KiB> for BitmapMemoryManager {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        self.allocate(1).map(|range| range.start).ok()
     }
 }

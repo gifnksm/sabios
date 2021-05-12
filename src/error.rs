@@ -1,5 +1,9 @@
 use core::fmt;
 
+use x86_64::structures::paging::{
+    mapper::MapToError, page::AddressNotAligned, PhysFrame, Size4KiB,
+};
+
 pub(crate) type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -41,6 +45,10 @@ pub(crate) enum ErrorKind {
     NotEnoughMemory,
     XhcNotFound,
     IndexOutOfRange,
+    AddressNotAligned,
+    FrameAllocationFailed,
+    ParentEntryHugePage,
+    PageAlreadyMapped(PhysFrame<Size4KiB>),
 }
 
 impl fmt::Display for ErrorKind {
@@ -52,6 +60,28 @@ impl fmt::Display for ErrorKind {
             }
             ErrorKind::Full => write!(f, "buffer full"),
             _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
+impl From<AddressNotAligned> for Error {
+    #[track_caller]
+    fn from(_: AddressNotAligned) -> Self {
+        crate::make_error!(ErrorKind::AddressNotAligned)
+    }
+}
+
+impl From<MapToError<Size4KiB>> for Error {
+    #[track_caller]
+    fn from(err: MapToError<Size4KiB>) -> Self {
+        match err {
+            MapToError::FrameAllocationFailed => {
+                crate::make_error!(ErrorKind::FrameAllocationFailed)
+            }
+            MapToError::ParentEntryHugePage => crate::make_error!(ErrorKind::ParentEntryHugePage),
+            MapToError::PageAlreadyMapped(frame) => {
+                crate::make_error!(ErrorKind::PageAlreadyMapped(frame))
+            }
         }
     }
 }

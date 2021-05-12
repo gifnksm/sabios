@@ -38,6 +38,7 @@ pub(crate) enum ErrorKind {
     Uninit(&'static str),
     WouldBlock(&'static str),
     Full,
+    NotEnoughMemory,
     XhcNotFound,
     IndexOutOfRange,
 }

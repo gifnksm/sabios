@@ -18,6 +18,7 @@ mod font;
 mod framebuffer;
 mod graphics;
 mod mouse;
+mod paging;
 mod pci;
 
 struct MemoryRegions<'a> {
@@ -52,7 +53,29 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         .expect("framebuffer not supported");
     framebuffer::init(framebuffer).expect("failed to initialize framebuffer");
 
+    let physical_memory_offset = boot_info
+        .physical_memory_offset
+        .as_ref()
+        .copied()
+        .expect("physical memory is not mapped");
+    let physical_memory_offset = VirtAddr::new(physical_memory_offset);
+
+    let mapper = unsafe { paging::init(physical_memory_offset) };
+
     desktop::draw().expect("failed to draw desktop");
+
+    let addresses = &[
+        0xb8000,
+        0x201008,
+        0x0100_0020_1a10,
+        physical_memory_offset.as_u64(),
+    ];
+
+    for &address in addresses {
+        let virt = VirtAddr::new(address);
+        let phys = mapper.translate(virt);
+        println!("{:?} -> {:?}", virt, phys);
+    }
 
     println!("Welcome to sabios!");
 
@@ -70,13 +93,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     mouse::draw_cursor().expect("failed to draw mouse cursor");
 
-    let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
+    // let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
 
-    for device in &devices {
-        println!("{}", device);
-    }
+    // for device in &devices {
+    //     println!("{}", device);
+    // }
 
-    Err::<(), _>(make_error!(ErrorKind::Uninit("test test test"))).expect("test");
+    // Err::<(), _>(make_error!(ErrorKind::Uninit("test test test"))).expect("test");
 
     hlt_loop();
 }

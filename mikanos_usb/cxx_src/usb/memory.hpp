@@ -7,10 +7,10 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace usb {
-/** @brief 動的メモリ確保のためのメモリプールの最大容量（バイト） */
-static const size_t kMemoryPoolSize = 4096 * 32;
+void SetMemoryPool(uintptr_t pool_ptr, size_t pool_size);
 
 /** @brief 指定されたバイト数のメモリ領域を確保して先頭ポインタを返す．
  *

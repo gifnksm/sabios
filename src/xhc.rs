@@ -35,6 +35,7 @@ pub(crate) fn init(
     debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
 
     map_xhc_mmio(mapper, xhc_mmio_base)?;
+    alloc_memory_pool(mapper)?;
 
     let xhc = unsafe { usb::xhci::Controller::new(xhc_mmio_base) };
 
@@ -64,6 +65,28 @@ fn map_xhc_mmio(mapper: &mut OffsetPageTable, xhc_mmio_base: u64) -> Result<()> 
         let page = base_page + i;
         let frame = base_frame + i;
         unsafe { mapper.map_to(page, frame, flags, &mut *allocator) }?.flush();
+    }
+    Ok(())
+}
+
+fn alloc_memory_pool(mapper: &mut OffsetPageTable) -> Result<()> {
+    use x86_64::structures::paging::PageTableFlags as Flags;
+    let num_frames = 32;
+    let mut allocator = memory::lock_memory_manager()?;
+    let frame_range = allocator.allocate(num_frames)?;
+    let page_range = Page::range(
+        Page::from_start_address(VirtAddr::new(frame_range.start.start_address().as_u64()))?,
+        Page::from_start_address(VirtAddr::new(frame_range.end.start_address().as_u64()))?,
+    );
+    let flags = Flags::PRESENT | Flags::WRITABLE;
+    for (frame, page) in frame_range.zip(page_range) {
+        unsafe { mapper.map_to(page, frame, flags, &mut *allocator) }?.flush();
+    }
+    unsafe {
+        usb::set_memory_pool(
+            page_range.start.start_address().as_u64(),
+            num_frames * (memory::BYTES_PER_FRAME as usize),
+        );
     }
     Ok(())
 }

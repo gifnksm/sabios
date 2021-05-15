@@ -62,7 +62,7 @@ entry_point!(kernel_main);
 
 #[allow(clippy::expect_used)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    log::set_level(log::Level::Debug);
+    log::set_level(log::Level::Info);
 
     let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
         .into_option()

@@ -1,5 +1,6 @@
 #include "logger.hpp"
 #include "usb/classdriver/mouse.hpp"
+#include "usb/memory.hpp"
 #include "usb/xhci/xhci.hpp"
 
 #include <cstdint>
@@ -39,4 +40,8 @@ extern "C" typedef void (*ObserverType)(int8_t displacement_x, int8_t displaceme
 
 extern "C" void cxx_xhci_hid_mouse_driver_set_default_observer(ObserverType observer) {
   usb::HIDMouseDriver::default_observer = observer;
+}
+
+extern "C" void cxx_set_memory_pool(uintptr_t pool_ptr, size_t pool_size) {
+  usb::SetMemoryPool(pool_ptr, pool_size);
 }

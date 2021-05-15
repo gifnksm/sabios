@@ -12,6 +12,7 @@ extern "C" {
     fn cxx_xhci_controller_configure_connected_ports(xhc: *mut xhci::Controller);
     fn cxx_xhci_controller_process_event(xhc: *mut xhci::Controller) -> i32;
     fn cxx_xhci_hid_mouse_driver_set_default_observer(observer: ObserverType);
+    fn cxx_set_memory_pool(pool_ptr: u64, pool_size: usize);
 }
 
 pub struct CxxError(pub i32);
@@ -55,6 +56,12 @@ pub type HidMouseObserver = extern "C" fn(displacement_x: i8, displacement_y: i8
 impl HidMouseDriver {
     pub fn set_default_observer(observer: HidMouseObserver) {
         unsafe { cxx_xhci_hid_mouse_driver_set_default_observer(observer) }
+    }
+}
+
+pub unsafe fn set_memory_pool(pool_ptr: u64, pool_size: usize) {
+    unsafe {
+        cxx_set_memory_pool(pool_ptr, pool_size);
     }
 }
 

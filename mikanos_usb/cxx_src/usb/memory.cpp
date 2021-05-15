@@ -13,8 +13,14 @@ template <class T, class U> T MaskBits(T value, U mask) {
 } // namespace
 
 namespace usb {
-alignas(64) uint8_t memory_pool[kMemoryPoolSize];
-uintptr_t alloc_ptr = reinterpret_cast<uintptr_t>(memory_pool);
+size_t memory_pool_size = 0;
+uintptr_t pool_base_ptr = 0;
+uintptr_t alloc_ptr = 0;
+
+void SetMemoryPool(uintptr_t pool_ptr, size_t pool_size) {
+  pool_base_ptr = alloc_ptr = pool_ptr;
+  memory_pool_size = pool_size;
+}
 
 void *AllocMem(size_t size, unsigned int alignment, unsigned int boundary) {
   if (alignment > 0) {
@@ -27,7 +33,7 @@ void *AllocMem(size_t size, unsigned int alignment, unsigned int boundary) {
     }
   }
 
-  if (reinterpret_cast<uintptr_t>(memory_pool) + kMemoryPoolSize < alloc_ptr + size) {
+  if (pool_base_ptr + memory_pool_size < alloc_ptr + size) {
     return nullptr;
   }
 

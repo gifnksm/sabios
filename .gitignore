@@ -1,1 +1,5 @@
+/.cache/
+/.gdb_history
+/.vscode/
+/compile_commands.json
 /target

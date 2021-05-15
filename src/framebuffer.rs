@@ -80,13 +80,12 @@ pub(crate) fn info() -> Result<&'static ScreenInfo, Error> {
 }
 
 pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>, Error> {
-    // TODO: consider interrupts
-    Ok(DRAWER.try_get().convert_err()?.lock())
-}
-
-pub(crate) fn try_lock_drawer() -> Result<Option<spin::MutexGuard<'static, Drawer>>, Error> {
-    // TODO: consider interrupts
-    Ok(DRAWER.try_get().convert_err()?.try_lock())
+    // consider interrupts
+    DRAWER
+        .try_get()
+        .convert_err()?
+        .try_lock()
+        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("DRAWER")))
 }
 
 #[derive(Debug, Clone, Copy)]

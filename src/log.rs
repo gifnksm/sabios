@@ -3,12 +3,11 @@ use core::fmt;
 static LOG_LEVEL: spin::RwLock<Level> = spin::RwLock::new(Level::Warn);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
 pub(crate) enum Level {
-    Error = 3,
-    Warn = 4,
-    Info = 6,
-    Debug = 7,
+    Error,
+    Warn,
+    Info,
+    Debug,
 }
 
 impl fmt::Display for Level {

@@ -41,8 +41,10 @@ static MEMORY_MANAGER: spin::Mutex<BitmapMemoryManager> = spin::Mutex::new(Bitma
     },
 });
 
-pub(crate) fn lock_memory_manager() -> spin::MutexGuard<'static, BitmapMemoryManager> {
-    MEMORY_MANAGER.lock()
+pub(crate) fn lock_memory_manager() -> Result<spin::MutexGuard<'static, BitmapMemoryManager>> {
+    MEMORY_MANAGER
+        .try_lock()
+        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("MEMORY_MANAGER")))
 }
 
 impl BitmapMemoryManager {
@@ -78,7 +80,7 @@ impl BitmapMemoryManager {
         loop {
             let end_frame = start_frame + num_frames as u64;
             if end_frame > self.range.end {
-                bail!(ErrorKind::NotEnoughMemory);
+                bail!(ErrorKind::NoEnoughMemory);
             }
 
             let range = PhysFrame::range(start_frame, end_frame);

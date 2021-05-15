@@ -68,13 +68,13 @@ impl Config {
         }
     }
 
-    // fn write(&self, addr: Addr, data: u32) {
-    //     let mut ports = self.0.lock();
-    //     unsafe {
-    //         ports.addr.write(addr.0);
-    //         ports.data.write(data)
-    //     }
-    // }
+    fn write(&self, addr: Addr, data: u32) {
+        let mut ports = self.0.lock();
+        unsafe {
+            ports.addr.write(addr.0);
+            ports.data.write(data)
+        }
+    }
 }
 
 fn read_vendor_id(bus: u8, device: u8, function: u8) -> u16 {
@@ -234,8 +234,12 @@ fn calc_bar_addr(bar_index: u8) -> u8 {
     0x10 + 4 * bar_index
 }
 
-fn read_conf_reg(dev: &Device, reg_addr: u8) -> u32 {
+pub(crate) fn read_conf_reg(dev: &Device, reg_addr: u8) -> u32 {
     CONFIG.read(dev.addr(reg_addr))
+}
+
+pub(crate) fn write_conf_reg(dev: &Device, reg_addr: u8, value: u32) {
+    CONFIG.write(dev.addr(reg_addr), value)
 }
 
 pub(crate) fn read_bar(dev: &Device, bar_index: u8) -> Result<u64> {

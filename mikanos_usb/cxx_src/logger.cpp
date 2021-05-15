@@ -3,6 +3,7 @@
 #include "cxx_support.h"
 
 #include <cstdio>
+#include <cstring>
 
 int Log(enum LogLevel level, const char *format, ...) {
   char buf[1024];
@@ -12,7 +13,7 @@ int Log(enum LogLevel level, const char *format, ...) {
   int res = vsnprintf(buf, sizeof(buf) - 1, format, ap);
   va_end(ap);
 
-  sabios_log(level, buf);
+  sabios_log(level, buf, strlen(buf));
 
   return res;
 }

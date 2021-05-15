@@ -1,5 +1,6 @@
+use crate::prelude::*;
 use core::fmt;
-
+use mikanos_usb::CxxError;
 use x86_64::structures::paging::{
     mapper::MapToError, page::AddressNotAligned, PhysFrame, Size4KiB,
 };
@@ -42,13 +43,28 @@ pub(crate) enum ErrorKind {
     Uninit(&'static str),
     WouldBlock(&'static str),
     Full,
-    NotEnoughMemory,
+    NoEnoughMemory,
     XhcNotFound,
     IndexOutOfRange,
     AddressNotAligned,
     FrameAllocationFailed,
     ParentEntryHugePage,
     PageAlreadyMapped(PhysFrame<Size4KiB>),
+    InvalidSlotID,
+    InvalidEndpointNumber,
+    TransferRingNotSet,
+    AlreadyAllocated,
+    NotImplemented,
+    InvalidDescriptor,
+    BufferTooSmall,
+    UnknownDevice,
+    NoCorrespondingSetupStage,
+    TransferFailed,
+    InvalidPhase,
+    UnknownXHCISpeedID,
+    NoWaiter,
+    EndpointNotInCharge,
+    Unknown,
 }
 
 impl fmt::Display for ErrorKind {
@@ -67,7 +83,7 @@ impl fmt::Display for ErrorKind {
 impl From<AddressNotAligned> for Error {
     #[track_caller]
     fn from(_: AddressNotAligned) -> Self {
-        crate::make_error!(ErrorKind::AddressNotAligned)
+        make_error!(ErrorKind::AddressNotAligned)
     }
 }
 
@@ -76,13 +92,39 @@ impl From<MapToError<Size4KiB>> for Error {
     fn from(err: MapToError<Size4KiB>) -> Self {
         match err {
             MapToError::FrameAllocationFailed => {
-                crate::make_error!(ErrorKind::FrameAllocationFailed)
+                make_error!(ErrorKind::FrameAllocationFailed)
             }
             MapToError::ParentEntryHugePage => crate::make_error!(ErrorKind::ParentEntryHugePage),
             MapToError::PageAlreadyMapped(frame) => {
-                crate::make_error!(ErrorKind::PageAlreadyMapped(frame))
+                make_error!(ErrorKind::PageAlreadyMapped(frame))
             }
         }
+    }
+}
+
+impl From<CxxError> for Error {
+    #[track_caller]
+    fn from(err: CxxError) -> Self {
+        use ErrorKind::*;
+        let kind = match err.0 {
+            1 => NoEnoughMemory,
+            2 => InvalidSlotID,
+            3 => InvalidEndpointNumber,
+            4 => TransferRingNotSet,
+            5 => AlreadyAllocated,
+            6 => NotImplemented,
+            7 => InvalidDescriptor,
+            8 => BufferTooSmall,
+            9 => UnknownDevice,
+            10 => NoCorrespondingSetupStage,
+            11 => TransferFailed,
+            12 => InvalidPhase,
+            13 => UnknownXHCISpeedID,
+            14 => NoWaiter,
+            15 => EndpointNotInCharge,
+            _ => Unknown,
+        };
+        make_error!(kind)
     }
 }
 

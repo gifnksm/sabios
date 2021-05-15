@@ -81,7 +81,8 @@ QEMU_OPTS := \
     -device nec-usb-xhci,id=xhci \
     -device usb-mouse \
     -device usb-kbd \
-    -monitor stdio
+    -monitor stdio \
+    -gdb tcp::1234
 
 ifdef QEMU_DEBUG
     QEMU_OPTS += -d int --no-reboot --no-shutdown

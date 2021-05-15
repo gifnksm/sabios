@@ -9,7 +9,7 @@ pub(crate) const FG_COLOR: Color = Color::WHITE;
 
 pub(crate) fn draw() -> Result<()> {
     let screen = *framebuffer::info()?;
-    let mut drawer = framebuffer::lock_drawer().expect("failed to get framebuffer");
+    let mut drawer = framebuffer::lock_drawer()?;
     drawer.fill_rect(
         Rectangle::new(
             Point::new(0, 0),

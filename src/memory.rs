@@ -94,11 +94,11 @@ impl BitmapMemoryManager {
         }
     }
 
-    pub(crate) fn free(&mut self, range: PhysFrameRange) {
-        for frame in range {
-            self.set_bit(frame, false)
-        }
-    }
+    // pub(crate) fn free(&mut self, range: PhysFrameRange) {
+    //     for frame in range {
+    //         self.set_bit(frame, false)
+    //     }
+    // }
 
     fn get_bit(&self, frame: PhysFrame) -> bool {
         let frame_index = frame.start_address().as_u64() / BYTES_PER_FRAME;

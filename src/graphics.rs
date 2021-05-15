@@ -98,21 +98,21 @@ impl<T> Rectangle<T> {
     }
 }
 
-impl<T> Rectangle<T>
-where
-    T: Copy + Ord + Sub<Output = T>,
-{
-    pub(crate) fn from_points(p0: Point<T>, p1: Point<T>) -> Self {
-        let x_start = T::min(p0.x, p1.x);
-        let y_start = T::min(p0.y, p1.y);
-        let x_end = T::max(p0.x, p1.x);
-        let y_end = T::max(p0.y, p1.y);
-        Rectangle {
-            pos: Point::new(x_start, y_start),
-            size: Size::new(x_end - x_start, y_end - y_start),
-        }
-    }
-}
+// impl<T> Rectangle<T>
+// where
+//     T: Copy + Ord + Sub<Output = T>,
+// {
+//     pub(crate) fn from_points(p0: Point<T>, p1: Point<T>) -> Self {
+//         let x_start = T::min(p0.x, p1.x);
+//         let y_start = T::min(p0.y, p1.y);
+//         let x_end = T::max(p0.x, p1.x);
+//         let y_end = T::max(p0.y, p1.y);
+//         Rectangle {
+//             pos: Point::new(x_start, y_start),
+//             size: Size::new(x_end - x_start, y_end - y_start),
+//         }
+//     }
+// }
 
 impl<T> Rectangle<T>
 where

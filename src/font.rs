@@ -1,5 +1,5 @@
 use crate::graphics::{Color, Draw, Point, Rectangle, Size};
-use core::{convert::TryFrom, fmt};
+use core::convert::TryFrom;
 
 pub(crate) const FONT_PIXEL_SIZE: Size<i32> = Size::new(8, 16);
 
@@ -47,51 +47,51 @@ pub(crate) fn char_to_byte(ch: char) -> u8 {
     u8::try_from(codepoint).unwrap_or(b'?')
 }
 
-pub(crate) fn draw_char<D>(drawer: &mut D, pos: Point<i32>, ch: char, color: Color)
-where
-    D: Draw,
-{
-    let byte = char_to_byte(ch);
-    draw_byte(drawer, pos, byte, color)
-}
+// pub(crate) fn draw_char<D>(drawer: &mut D, pos: Point<i32>, ch: char, color: Color)
+// where
+//     D: Draw,
+// {
+//     let byte = char_to_byte(ch);
+//     draw_byte(drawer, pos, byte, color)
+// }
 
-pub(crate) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
-where
-    D: Draw,
-{
-    let mut pos = pos;
-    for ch in s.chars() {
-        draw_char(drawer, pos, ch, color);
-        pos.x += FONT_PIXEL_SIZE.x;
-    }
-}
+// pub(crate) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
+// where
+//     D: Draw,
+// {
+//     let mut pos = pos;
+//     for ch in s.chars() {
+//         draw_char(drawer, pos, ch, color);
+//         pos.x += FONT_PIXEL_SIZE.x;
+//     }
+// }
 
-#[derive(Debug)]
-pub(crate) struct StringDrawer<'d, D> {
-    drawer: &'d mut D,
-    pos: Point<i32>,
-    color: Color,
-}
+// #[derive(Debug)]
+// pub(crate) struct StringDrawer<'d, D> {
+//     drawer: &'d mut D,
+//     pos: Point<i32>,
+//     color: Color,
+// }
 
-impl<'d, D> StringDrawer<'d, D> {
-    pub(crate) fn new(drawer: &'d mut D, start_pos: Point<i32>, color: Color) -> Self {
-        Self {
-            drawer,
-            pos: start_pos,
-            color,
-        }
-    }
-}
+// impl<'d, D> StringDrawer<'d, D> {
+//     pub(crate) fn new(drawer: &'d mut D, start_pos: Point<i32>, color: Color) -> Self {
+//         Self {
+//             drawer,
+//             pos: start_pos,
+//             color,
+//         }
+//     }
+// }
 
-impl<'d, D> fmt::Write for StringDrawer<'d, D>
-where
-    D: Draw,
-{
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for ch in s.chars() {
-            draw_char(self.drawer, self.pos, ch, self.color);
-            self.pos.x += FONT_PIXEL_SIZE.x;
-        }
-        Ok(())
-    }
-}
+// impl<'d, D> fmt::Write for StringDrawer<'d, D>
+// where
+//     D: Draw,
+// {
+//     fn write_str(&mut self, s: &str) -> fmt::Result {
+//         for ch in s.chars() {
+//             draw_char(self.drawer, self.pos, ch, self.color);
+//             self.pos.x += FONT_PIXEL_SIZE.x;
+//         }
+//         Ok(())
+//     }
+// }

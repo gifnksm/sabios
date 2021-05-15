@@ -91,7 +91,8 @@ Error Device::ControlIn(EndpointID ep_id, SetupData setup_data, void *buf, int l
     return err;
   }
 
-  Log(kDebug, "Device::ControlIn: ep addr %d, buf 0x%08x, len %d\n", ep_id.Address(), buf, len);
+  Log(kDebug, "Device::ControlIn: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
+      reinterpret_cast<uintptr_t>(buf), len);
   if (ep_id.Number() < 0 || 15 < ep_id.Number()) {
     return MAKE_ERROR(Error::kInvalidEndpointNumber);
   }
@@ -137,7 +138,8 @@ Error Device::ControlOut(EndpointID ep_id, SetupData setup_data, const void *buf
     return err;
   }
 
-  Log(kDebug, "Device::ControlOut: ep addr %d, buf 0x%08x, len %d\n", ep_id.Address(), buf, len);
+  Log(kDebug, "Device::ControlOut: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
+      reinterpret_cast<uintptr_t>(buf), len);
   if (ep_id.Number() < 0 || 15 < ep_id.Number()) {
     return MAKE_ERROR(Error::kInvalidEndpointNumber);
   }
@@ -207,7 +209,7 @@ Error Device::InterruptOut(EndpointID ep_id, void *buf, int len) {
   }
 
   Log(kDebug, "Device::InterrutpOut: ep addr %d, buf %08lx, len %d, dev %08lx\n", ep_id.Address(),
-      buf, len, this);
+      reinterpret_cast<uintptr_t>(buf), len, reinterpret_cast<uintptr_t>(this));
   return MAKE_ERROR(Error::kNotImplemented);
 }
 

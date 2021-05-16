@@ -1,49 +1,20 @@
 use crate::{
+    error::ConvertErr as _,
     graphics::{Color, Draw, Point, Rectangle},
-    make_error, Error, ErrorKind,
+    prelude::*,
 };
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
-use conquer_once::{spin::OnceCell, TryGetError, TryInitError};
-use core::{convert::TryFrom, fmt};
+use conquer_once::spin::OnceCell;
+use core::convert::TryFrom;
 
 static INFO: OnceCell<ScreenInfo> = OnceCell::uninit();
 static DRAWER: OnceCell<spin::Mutex<Drawer>> = OnceCell::uninit();
 
-#[derive(Debug)]
-pub(crate) enum InitError {
-    UnsupportedPixelFormat(PixelFormat),
-    ParameterTooLarge(&'static str, usize),
-    AlreadyInit,
-    WouldBlock,
-}
-
-impl From<TryInitError> for InitError {
-    fn from(err: TryInitError) -> Self {
-        match err {
-            TryInitError::AlreadyInit => InitError::AlreadyInit,
-            TryInitError::WouldBlock => InitError::WouldBlock,
-        }
-    }
-}
-
-impl fmt::Display for InitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnsupportedPixelFormat(pixel_format) => {
-                write!(f, "unsupported pixel format: {:?}", pixel_format)
-            }
-            Self::ParameterTooLarge(name, value) => write!(f, "too large {}: {}", name, value),
-            Self::AlreadyInit => write!(f, "framebuffer has already been initialized"),
-            Self::WouldBlock => write!(f, "framebuffer is currently being initialized"),
-        }
-    }
-}
-
-pub(crate) fn init(framebuffer: FrameBuffer) -> Result<(), InitError> {
+pub(crate) fn init(framebuffer: FrameBuffer) -> Result<()> {
     let original_info = framebuffer.info();
     let pixel_format = original_info.pixel_format;
-    let pixel_drawer =
-        select_pixel_drawer(pixel_format).ok_or(InitError::UnsupportedPixelFormat(pixel_format))?;
+    let pixel_drawer = select_pixel_drawer(pixel_format)
+        .ok_or_else(|| make_error!(ErrorKind::UnsupportedPixelFormat(pixel_format)))?;
 
     let info = ScreenInfo::new(&original_info)?;
 
@@ -53,39 +24,24 @@ pub(crate) fn init(framebuffer: FrameBuffer) -> Result<(), InitError> {
         pixel_drawer,
     };
 
-    INFO.try_init_once(|| info)?;
-    DRAWER.try_init_once(|| spin::Mutex::new(drawer))?;
+    INFO.try_init_once(|| info)
+        .convert_err("framebuffer::INFO")?;
+    DRAWER
+        .try_init_once(|| spin::Mutex::new(drawer))
+        .convert_err("framebuffer::DRAWER")?;
     Ok(())
 }
-
-trait ResultExt {
-    type Output;
-    fn convert_err(self) -> Self::Output;
+pub(crate) fn info() -> Result<&'static ScreenInfo> {
+    INFO.try_get().convert_err("framebuffer::INFO")
 }
 
-impl<T> ResultExt for Result<T, TryGetError> {
-    type Output = Result<T, Error>;
-
-    #[track_caller]
-    fn convert_err(self) -> Self::Output {
-        self.map_err(|err| match err {
-            TryGetError::Uninit => make_error!(ErrorKind::Uninit("framebuffer")),
-            TryGetError::WouldBlock => make_error!(ErrorKind::WouldBlock("framebuffer")),
-        })
-    }
-}
-
-pub(crate) fn info() -> Result<&'static ScreenInfo, Error> {
-    INFO.try_get().convert_err()
-}
-
-pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>, Error> {
+pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>> {
     // consider interrupts
     DRAWER
         .try_get()
-        .convert_err()?
+        .convert_err("framebuffer::DRAWER")?
         .try_lock()
-        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("DRAWER")))
+        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("framebuffer::DRAWER")))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,9 +53,10 @@ pub(crate) struct ScreenInfo {
 }
 
 impl ScreenInfo {
-    fn new(info: &FrameBufferInfo) -> Result<Self, InitError> {
-        fn usize_to_i32(name: &'static str, value: usize) -> Result<i32, InitError> {
-            i32::try_from(value).map_err(|_e| InitError::ParameterTooLarge(name, value))
+    fn new(info: &FrameBufferInfo) -> Result<Self> {
+        fn usize_to_i32(name: &'static str, value: usize) -> Result<i32> {
+            i32::try_from(value)
+                .map_err(|_e| make_error!(ErrorKind::ParameterTooLarge(name, value)))
         }
 
         Ok(Self {

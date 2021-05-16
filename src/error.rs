@@ -1,4 +1,6 @@
 use crate::prelude::*;
+use bootloader::boot_info::PixelFormat;
+use conquer_once::{TryGetError, TryInitError};
 use core::fmt;
 use mikanos_usb::CxxError;
 use x86_64::structures::paging::{
@@ -40,6 +42,9 @@ impl fmt::Display for Error {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
+    UnsupportedPixelFormat(PixelFormat),
+    ParameterTooLarge(&'static str, usize),
+    AlreadyInit(&'static str),
     Uninit(&'static str),
     WouldBlock(&'static str),
     Full,
@@ -70,6 +75,11 @@ pub(crate) enum ErrorKind {
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ErrorKind::UnsupportedPixelFormat(pixel_format) => {
+                write!(f, "unsupported pixel format: {:?}", pixel_format)
+            }
+            ErrorKind::ParameterTooLarge(name, value) => write!(f, "too large {}: {}", name, value),
+            ErrorKind::AlreadyInit(target) => write!(f, "{} has already been initialized", target),
             ErrorKind::Uninit(target) => write!(f, "{} is uninitialized", target),
             ErrorKind::WouldBlock(target) => {
                 write!(f, "{} is currently being initialized", target)
@@ -140,4 +150,32 @@ macro_rules! bail {
     ($kind:expr) => {
         return Err($crate::make_error!($kind))
     };
+}
+pub(crate) trait ConvertErr {
+    type Output;
+    fn convert_err(self, msg: &'static str) -> Self::Output;
+}
+
+impl<T> ConvertErr for core::result::Result<T, TryGetError> {
+    type Output = core::result::Result<T, Error>;
+
+    #[track_caller]
+    fn convert_err(self, msg: &'static str) -> Self::Output {
+        self.map_err(|err| match err {
+            TryGetError::Uninit => make_error!(ErrorKind::Uninit(msg)),
+            TryGetError::WouldBlock => make_error!(ErrorKind::WouldBlock(msg)),
+        })
+    }
+}
+
+impl<T> ConvertErr for core::result::Result<T, TryInitError> {
+    type Output = core::result::Result<T, Error>;
+
+    #[track_caller]
+    fn convert_err(self, msg: &'static str) -> Self::Output {
+        self.map_err(|err| match err {
+            TryInitError::AlreadyInit => make_error!(ErrorKind::AlreadyInit(msg)),
+            TryInitError::WouldBlock => make_error!(ErrorKind::WouldBlock(msg)),
+        })
+    }
 }

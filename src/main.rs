@@ -16,6 +16,7 @@ mod desktop;
 mod error;
 mod font;
 mod framebuffer;
+mod gdt;
 mod graphics;
 mod interrupt;
 mod log;
@@ -60,6 +61,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             .expect("failed to map CPU register addresses");
     }
 
+    gdt::init().expect("failed to init gdt");
     interrupt::init().expect("failed to init interrupts");
 
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");

@@ -51,7 +51,7 @@ extern "x86-interrupt" fn page_fault_handler(
 
     println!("EXCEPTION: PAGE FAULT");
     println!("Accessed Address: {:?}", Cr2::read());
-    println!("Error Code: {:?}", error_code);
+    println!("Error Code: {:x}", error_code);
     println!("{:#?}", stack_frame);
 
     crate::hlt_loop();
@@ -62,7 +62,7 @@ extern "x86-interrupt" fn general_protection_fault_handler(
     error_code: u64,
 ) {
     println!("EXCEPTION: GENERAL PROTECTION FAULT");
-    println!("Error Code: {:?}", error_code);
+    println!("Error Code: {:x}", error_code);
     println!("{:#?}", stack_frame);
 
     crate::hlt_loop();
@@ -70,7 +70,10 @@ extern "x86-interrupt" fn general_protection_fault_handler(
 
 extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
-    _error_code: u64,
+    error_code: u64,
 ) -> ! {
-    panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
+    panic!(
+        "EXCEPTION: DOUBLE FAULT\nError Code: {:x}\n{:#?}",
+        error_code, stack_frame
+    );
 }

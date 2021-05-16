@@ -5,10 +5,7 @@
 #![no_main]
 
 use self::prelude::*;
-use bootloader::{
-    boot_info::{MemoryRegion, Optional},
-    entry_point, BootInfo,
-};
+use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 use x86_64::VirtAddr;
 
@@ -26,37 +23,6 @@ mod paging;
 mod pci;
 mod prelude;
 mod xhc;
-
-struct MemoryRegions<'a> {
-    regions: core::slice::Iter<'a, MemoryRegion>,
-}
-
-impl<'a> MemoryRegions<'a> {
-    fn new(regions: &'a [MemoryRegion]) -> Self {
-        Self {
-            regions: regions.iter(),
-        }
-    }
-}
-
-impl<'a> Iterator for MemoryRegions<'a> {
-    type Item = MemoryRegion;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut current = *self.regions.next()?;
-        loop {
-            #[allow(clippy::suspicious_operation_groupings)]
-            match self.regions.as_slice().get(0) {
-                Some(next) if current.kind == next.kind && current.end == next.start => {
-                    current.end = next.end;
-                    let _ = self.regions.next();
-                    continue;
-                }
-                _ => return Some(current),
-            }
-        }
-    }
-}
 
 entry_point!(kernel_main);
 
@@ -82,7 +48,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     memory::lock_memory_manager()
         .expect("failed to lock memory manager")
-        .init(MemoryRegions::new(&*boot_info.memory_regions))
+        .init(boot_info.memory_regions.iter().copied())
         .expect("failed to initialize bitmap memory manager");
 
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");

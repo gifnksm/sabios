@@ -78,6 +78,7 @@ help:
 
 # commands
 QEMU_OPTS := \
+    -m 1G \
     -device nec-usb-xhci,id=xhci \
     -device usb-mouse \
     -device usb-kbd \
@@ -110,7 +111,7 @@ cargo-build-sabios-%:
 	$(CARGO) build $(CARGO_BUILD_MODE_OPTIONS) \
 	    -p sabios \
 	    --target $(TARGET).json \
-	    -Z build-std=core
+	    -Z build-std=core,alloc
 .PHONY: cargo-build-sabios-%
 
 cargo-clean:

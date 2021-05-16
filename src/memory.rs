@@ -73,7 +73,24 @@ impl BitmapMemoryManager {
         for frame in range {
             self.set_bit(frame, true);
         }
+        // update range for faster allocation
+        if self.range.start == range.start {
+            self.range.start = range.end;
+            while self.range.start < self.range.end && self.get_bit(self.range.start) {
+                self.range.start += 1;
+            }
+        }
     }
+
+    // fn mark_freed(&mut self, range: PhysFrameRange) {
+    //     for frame in range {
+    //         self.set_bit(frame, false)
+    //     }
+    //     // update range if needed
+    //     if self.range.start <= range.end {
+    //         self.range.start = range.start;
+    //     }
+    // }
 
     pub(crate) fn allocate(&mut self, num_frames: usize) -> Result<PhysFrameRange> {
         let mut start_frame = self.range.start;

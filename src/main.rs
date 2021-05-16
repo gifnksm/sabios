@@ -2,14 +2,19 @@
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
+#![feature(const_mut_refs)]
 #![no_std]
 #![no_main]
+
+extern crate alloc;
 
 use self::prelude::*;
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 use x86_64::VirtAddr;
 
+mod allocator;
 mod console;
 mod cxx_support;
 mod desktop;
@@ -59,6 +64,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         // Map CPU register addresses as identity mapping
         paging::make_identity_mapping(&mut mapper, &mut *allocator, 0xfee00000, 1)
             .expect("failed to map CPU register addresses");
+
+        allocator::init_heap(&mut mapper, &mut *allocator).expect("failed to initialize heap");
     }
 
     gdt::init().expect("failed to init gdt");

@@ -11,6 +11,7 @@ extern "C" {
     fn cxx_xhci_controller_run(xhc: *mut xhci::Controller) -> i32;
     fn cxx_xhci_controller_configure_connected_ports(xhc: *mut xhci::Controller);
     fn cxx_xhci_controller_process_event(xhc: *mut xhci::Controller) -> i32;
+    fn cxx_xhci_controller_has_event(xhc: *mut xhci::Controller) -> bool;
     fn cxx_xhci_hid_mouse_driver_set_default_observer(observer: ObserverType);
     fn cxx_set_memory_pool(pool_ptr: u64, pool_size: usize);
 }
@@ -44,6 +45,10 @@ pub mod xhci {
         pub fn process_event(&mut self) -> Result<(), CxxError> {
             let res = unsafe { cxx_xhci_controller_process_event(self) };
             convert_res(res)
+        }
+
+        pub fn has_event(&mut self) -> bool {
+            unsafe { cxx_xhci_controller_has_event(self) }
         }
     }
 }

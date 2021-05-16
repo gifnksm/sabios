@@ -1,6 +1,7 @@
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
+#![feature(abi_x86_interrupt)]
 #![no_std]
 #![no_main]
 
@@ -16,6 +17,7 @@ mod error;
 mod font;
 mod framebuffer;
 mod graphics;
+mod interrupt;
 mod log;
 mod memory;
 mod mouse;
@@ -46,28 +48,33 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     desktop::draw().expect("failed to draw desktop");
 
-    memory::lock_memory_manager()
-        .expect("failed to lock memory manager")
-        .init(boot_info.memory_regions.iter().copied())
-        .expect("failed to initialize bitmap memory manager");
+    {
+        let mut allocator = memory::lock_memory_manager().expect("failed to lock memory manager");
+
+        allocator
+            .init(boot_info.memory_regions.iter().copied())
+            .expect("failed to initialize bitmap memory manager");
+
+        // Map CPU register addresses as identity mapping
+        paging::make_identity_mapping(&mut mapper, &mut *allocator, 0xfee00000, 1)
+            .expect("failed to map CPU register addresses");
+    }
+
+    interrupt::init().expect("failed to init interrupts");
 
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
     for device in &devices {
         debug!("{}", device);
     }
-    let xhc = xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
+    xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
 
     mouse::init().expect("failed to initialize mouse cursor");
 
     println!("Welcome to sabios!");
 
-    loop {
-        if let Err(err) = xhc.process_event().map_err(Error::from) {
-            error!("error while process_event: {}", err);
-        }
-    }
+    x86_64::instructions::interrupts::enable();
 
-    // hlt_loop();
+    hlt_loop();
 }
 
 fn hlt_loop() -> ! {

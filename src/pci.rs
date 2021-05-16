@@ -1,7 +1,8 @@
-use crate::prelude::*;
+use crate::{interrupt::InterruptIndex, prelude::*};
 use arrayvec::ArrayVec;
 use bit_field::BitField;
 use core::{fmt, ops::Range};
+use custom_debug_derive::Debug as CustomDebug;
 use x86_64::instructions::port::Port;
 
 const INVALID_VENDOR_ID: u16 = 0xffff;
@@ -261,4 +262,240 @@ pub(crate) fn read_bar(dev: &Device, bar_index: u8) -> Result<u64> {
 
     let bar_upper = read_conf_reg(dev, addr + 4);
     Ok(u64::from(bar) | u64::from(bar_upper) << 32)
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MsiTriggerMode {
+    Edge,
+    Level,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub(crate) enum MsiDeliveryMode {
+    Fixed = 0b000,
+    LowestPriority = 0b001,
+    Smi = 0b010,
+    Nmi = 0b100,
+    Init = 0b101,
+    ExtInt = 0b111,
+}
+
+impl MsiDeliveryMode {
+    fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    fn as_u32(self) -> u32 {
+        u32::from(self.as_u8())
+    }
+}
+
+const CAPABILITY_MSI: u8 = 0x05;
+const CAPABILITY_MSIX: u8 = 0x11;
+
+#[derive(CustomDebug, Clone, Copy, Default)]
+#[repr(C)]
+struct CapabilityHeader {
+    cap_id: u8,
+    #[debug(format = "{:02x}")]
+    next_ptr: u8,
+    #[debug(format = "{:04x}")]
+    cap: u16,
+}
+
+impl From<u32> for CapabilityHeader {
+    fn from(value: u32) -> Self {
+        let mut header = Self::default();
+        unsafe { *(&mut header as *mut _ as *mut u32) = value };
+        header
+    }
+}
+
+impl CapabilityHeader {
+    fn as_u32(self) -> u32 {
+        unsafe { *(&self as *const _ as *const u32) }
+    }
+
+    const BIT_MSI_ENABLE: usize = 0;
+    const BITS_MULTI_MSG_CAPABLE: Range<usize> = 1..4;
+    const BITS_MULTI_MSG_ENABLE: Range<usize> = 4..7;
+    const BIT_ADDR_64_CAPABLE: usize = 7;
+    const BIT_PER_VECTOR_MASK_CAPABLE: usize = 8;
+    // const BITS_RESERVED: Range<usize> = 9..16;
+    // fn msi_enable(self) -> bool {
+    //     self.cap.get_bit(Self::BIT_MSI_ENABLE)
+    // }
+    fn set_msi_enable(&mut self, value: bool) -> &mut Self {
+        let _ = self.cap.set_bit(Self::BIT_MSI_ENABLE, value);
+        self
+    }
+    fn multi_msg_capable(self) -> u8 {
+        self.cap.get_bits(Self::BITS_MULTI_MSG_CAPABLE) as u8
+    }
+    // fn multi_msg_enable(self) -> u8 {
+    //     self.cap.get_bits(Self::BITS_MULTI_MSG_ENABLE) as u8
+    // }
+    fn set_multi_msg_enable(&mut self, value: u8) -> &mut Self {
+        let _ = self
+            .cap
+            .set_bits(Self::BITS_MULTI_MSG_ENABLE, u16::from(value));
+        self
+    }
+    fn addr_64_capable(self) -> bool {
+        self.cap.get_bit(Self::BIT_ADDR_64_CAPABLE)
+    }
+    fn per_vector_mask_capable(self) -> bool {
+        self.cap.get_bit(Self::BIT_PER_VECTOR_MASK_CAPABLE)
+    }
+}
+
+#[derive(CustomDebug, Clone, Copy)]
+#[repr(C)]
+struct MsiCapability {
+    header: CapabilityHeader,
+    #[debug(format = "{:08x}")]
+    msg_addr: u32,
+    #[debug(format = "{:08x}")]
+    msg_upper_addr: u32,
+    #[debug(format = "{:08x}")]
+    msg_data: u32,
+    #[debug(format = "{:08x}")]
+    mask_bits: u32,
+    #[debug(format = "{:08x}")]
+    pending_bits: u32,
+}
+
+pub(crate) fn configure_msi_fixed_destination(
+    dev: &Device,
+    apic_id: u32,
+    trigger_mode: MsiTriggerMode,
+    delivery_mode: MsiDeliveryMode,
+    vector: InterruptIndex,
+    num_vector_exponent: u8,
+) -> Result<()> {
+    let msg_addr = 0xfee00000 | (apic_id << 12);
+    let mut msg_data = (delivery_mode.as_u32() << 8) | vector.as_u32();
+    if trigger_mode == MsiTriggerMode::Level {
+        msg_data |= 0xc000;
+    }
+    configure_msi(dev, msg_addr, msg_data, num_vector_exponent)?;
+    Ok(())
+}
+
+fn configure_msi(
+    dev: &Device,
+    msg_addr: u32,
+    msg_data: u32,
+    num_vector_exponent: u8,
+) -> Result<()> {
+    let mut cap_addr = (read_conf_reg(dev, 0x34) & 0xff) as u8;
+    let mut msi_cap_addr = None;
+    let mut msix_cap_addr = None;
+    while cap_addr != 0 {
+        let header = read_capability_header(dev, cap_addr);
+        match header.cap_id {
+            CAPABILITY_MSI => msi_cap_addr = Some(cap_addr),
+            CAPABILITY_MSIX => msix_cap_addr = Some(cap_addr),
+            _ => {}
+        }
+        cap_addr = header.next_ptr;
+    }
+    if let Some(cap_addr) = msi_cap_addr {
+        return configure_msi_register(dev, cap_addr, msg_addr, msg_data, num_vector_exponent);
+    }
+    if let Some(cap_addr) = msix_cap_addr {
+        return configure_msix_register(dev, cap_addr, msg_addr, msg_data, num_vector_exponent);
+    }
+    bail!(ErrorKind::NoPciMsi)
+}
+
+fn configure_msi_register(
+    dev: &Device,
+    cap_addr: u8,
+    msg_addr: u32,
+    msg_data: u32,
+    num_vector_exponent: u8,
+) -> Result<()> {
+    let mut msi_cap = read_msi_capability(dev, cap_addr);
+
+    let multi_msg_enable = u8::min(msi_cap.header.multi_msg_capable(), num_vector_exponent);
+    msi_cap.header.set_multi_msg_enable(multi_msg_enable);
+    msi_cap.header.set_msi_enable(true);
+    msi_cap.msg_addr = msg_addr;
+    msi_cap.msg_data = msg_data;
+
+    write_msi_capability(dev, cap_addr, msi_cap);
+
+    Ok(())
+}
+
+fn configure_msix_register(
+    _dev: &Device,
+    _cap_addr: u8,
+    _msg_addr: u32,
+    _msg_data: u32,
+    _num_vector_exponent: u8,
+) -> Result<()> {
+    bail!(ErrorKind::NotImplemented)
+}
+
+fn read_capability_header(dev: &Device, cap_addr: u8) -> CapabilityHeader {
+    CapabilityHeader::from(read_conf_reg(dev, cap_addr))
+}
+
+fn read_msi_capability(dev: &Device, cap_addr: u8) -> MsiCapability {
+    let header = read_capability_header(dev, cap_addr);
+    let msg_addr = read_conf_reg(dev, cap_addr + 4);
+    let msg_upper_addr;
+
+    let msg_data_addr;
+    if header.addr_64_capable() {
+        msg_upper_addr = read_conf_reg(dev, cap_addr + 8);
+        msg_data_addr = cap_addr + 12;
+    } else {
+        msg_upper_addr = 0;
+        msg_data_addr = cap_addr + 8;
+    }
+    let msg_data = read_conf_reg(dev, msg_data_addr);
+    let mask_bits;
+    let pending_bits;
+
+    if header.per_vector_mask_capable() {
+        mask_bits = read_conf_reg(dev, msg_data_addr + 4);
+        pending_bits = read_conf_reg(dev, msg_data_addr + 8);
+    } else {
+        mask_bits = 0;
+        pending_bits = 0;
+    }
+
+    MsiCapability {
+        header,
+        msg_addr,
+        msg_upper_addr,
+        msg_data,
+        mask_bits,
+        pending_bits,
+    }
+}
+
+fn write_msi_capability(dev: &Device, cap_addr: u8, msi_cap: MsiCapability) {
+    write_conf_reg(dev, cap_addr, msi_cap.header.as_u32());
+    write_conf_reg(dev, cap_addr + 4, msi_cap.msg_addr);
+
+    let msg_data_addr;
+    if msi_cap.header.addr_64_capable() {
+        write_conf_reg(dev, cap_addr + 8, msi_cap.msg_upper_addr);
+        msg_data_addr = cap_addr + 12;
+    } else {
+        msg_data_addr = cap_addr + 8;
+    }
+    write_conf_reg(dev, msg_data_addr, msi_cap.msg_data);
+
+    if msi_cap.header.per_vector_mask_capable() {
+        write_conf_reg(dev, msg_data_addr + 4, msi_cap.mask_bits);
+        write_conf_reg(dev, msg_data_addr + 8, msi_cap.pending_bits);
+    }
 }

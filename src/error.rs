@@ -69,6 +69,7 @@ pub(crate) enum ErrorKind {
     UnknownXHCISpeedID,
     NoWaiter,
     EndpointNotInCharge,
+    NoPciMsi,
     Unknown,
 }
 

@@ -36,6 +36,10 @@ extern "C" int32_t cxx_xhci_controller_process_event(usb::xhci::Controller *xhc)
   return err.Cause();
 }
 
+extern "C" bool cxx_xhci_controller_has_event(usb::xhci::Controller *xhc) {
+  return xhc->PrimaryEventRing()->HasFront();
+}
+
 extern "C" typedef void (*ObserverType)(int8_t displacement_x, int8_t displacement_y);
 
 extern "C" void cxx_xhci_hid_mouse_driver_set_default_observer(ObserverType observer) {

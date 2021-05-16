@@ -3,6 +3,7 @@ use crate::{
     graphics::{Color, Draw, Point, Rectangle, Size},
 };
 use core::{convert::TryFrom, fmt};
+use x86_64::instructions::interrupts;
 
 #[macro_export]
 macro_rules! print {
@@ -19,12 +20,14 @@ macro_rules! println {
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write as _;
 
-    if let Ok(mut framebuffer) = framebuffer::lock_drawer() {
-        if let Some(mut console) = CONSOLE.try_lock() {
-            #[allow(clippy::unwrap_used)]
-            console.writer(&mut *framebuffer).write_fmt(args).unwrap();
+    interrupts::without_interrupts(|| {
+        if let Ok(mut framebuffer) = framebuffer::lock_drawer() {
+            if let Some(mut console) = CONSOLE.try_lock() {
+                #[allow(clippy::unwrap_used)]
+                console.writer(&mut *framebuffer).write_fmt(args).unwrap();
+            }
         }
-    }
+    });
 }
 
 const ROWS: usize = 25;

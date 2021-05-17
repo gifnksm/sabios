@@ -1,5 +1,5 @@
 use crate::{error::ConvertErr as _, prelude::*};
-use conquer_once::spin::OnceCell;
+use conquer_once::noblock::OnceCell;
 use x86_64::{
     instructions::segmentation,
     structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
@@ -10,12 +10,13 @@ static GDT: OnceCell<GlobalDescriptorTable> = OnceCell::uninit();
 pub(crate) fn init() -> Result<()> {
     let mut code_selector = None;
     let mut stack_selector = None;
-    GDT.init_once(|| {
+    GDT.try_init_once(|| {
         let mut gdt = GlobalDescriptorTable::new();
         code_selector = Some(gdt.add_entry(Descriptor::kernel_code_segment()));
         stack_selector = Some(gdt.add_entry(Descriptor::kernel_data_segment()));
         gdt
-    });
+    })
+    .convert_err("gdt::GDT")?;
     GDT.try_get().convert_err("gdt::GDT")?.load();
 
     let null_segment = SegmentSelector::new(0, x86_64::PrivilegeLevel::Ring0);

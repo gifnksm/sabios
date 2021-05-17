@@ -6,7 +6,7 @@ use crate::{
     prelude::*,
     util,
 };
-use conquer_once::spin::OnceCell;
+use conquer_once::noblock::OnceCell;
 use core::{
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},

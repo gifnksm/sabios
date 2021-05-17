@@ -1,5 +1,5 @@
 use crate::{error::ConvertErr as _, prelude::*};
-use conquer_once::spin::OnceCell;
+use conquer_once::noblock::OnceCell;
 
 #[track_caller]
 pub(crate) fn try_get_and_lock<T>(

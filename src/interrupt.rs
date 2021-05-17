@@ -1,5 +1,5 @@
 use crate::{error::ConvertErr as _, prelude::*, println, xhc};
-use conquer_once::spin::OnceCell;
+use conquer_once::noblock::OnceCell;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 #[derive(Debug, Clone, Copy)]
@@ -25,7 +25,7 @@ impl InterruptIndex {
 static IDT: OnceCell<InterruptDescriptorTable> = OnceCell::uninit();
 
 pub(crate) fn init() -> Result<()> {
-    IDT.init_once(|| {
+    IDT.try_init_once(|| {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
@@ -36,7 +36,8 @@ pub(crate) fn init() -> Result<()> {
         idt.double_fault.set_handler_fn(double_fault_handler);
         idt[InterruptIndex::Xhci.as_usize()].set_handler_fn(xhc::interrupt_handler);
         idt
-    });
+    })
+    .convert_err("interrupt::IDT")?;
     IDT.try_get().convert_err("interrupt::IDT")?.load();
     Ok(())
 }

@@ -5,7 +5,7 @@ use crate::{
     util,
 };
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
-use conquer_once::spin::OnceCell;
+use conquer_once::noblock::OnceCell;
 use core::convert::TryFrom;
 
 static INFO: OnceCell<ScreenInfo> = OnceCell::uninit();

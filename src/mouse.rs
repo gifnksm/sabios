@@ -85,7 +85,7 @@ impl MouseCursor {
 fn lock() -> Result<spin::MutexGuard<'static, MouseCursor>> {
     Ok(MOUSE_CURSOR
         .try_lock()
-        .ok_or(ErrorKind::WouldBlock("MOUSE_CURSOR"))?)
+        .ok_or(ErrorKind::Deadlock("mouse::MOUSE_CURSOR"))?)
 }
 
 pub(crate) fn init() -> Result<()> {

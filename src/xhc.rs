@@ -113,7 +113,7 @@ fn interrupt_handler_inner() -> Result<()> {
         .try_get()
         .convert_err("xhc::XHC")?
         .try_lock()
-        .ok_or(ErrorKind::WouldBlock("xhc::XHC"))?;
+        .ok_or(ErrorKind::Deadlock("xhc::XHC"))?;
     while xhc.has_event() {
         if let Err(err) = xhc.process_event().map_err(Error::from) {
             error!("error while process_event: {}", err);

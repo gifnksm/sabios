@@ -41,7 +41,7 @@ pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>> {
         .try_get()
         .convert_err("framebuffer::DRAWER")?
         .try_lock()
-        .ok_or(ErrorKind::WouldBlock("framebuffer::DRAWER"))?)
+        .ok_or(ErrorKind::Deadlock("framebuffer::DRAWER"))?)
 }
 
 #[derive(Debug, Clone, Copy)]

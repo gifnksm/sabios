@@ -2,9 +2,7 @@ use bootloader::boot_info::PixelFormat;
 use conquer_once::{TryGetError, TryInitError};
 use core::{fmt, panic::Location};
 use mikanos_usb::CxxError;
-use x86_64::structures::paging::{
-    mapper::MapToError, page::AddressNotAligned, PhysFrame, Size4KiB,
-};
+use x86_64::structures::paging::{mapper::MapToError, page::AddressNotAligned, Size4KiB};
 
 pub(crate) type Result<T> = core::result::Result<T, Error>;
 
@@ -44,21 +42,19 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) enum ErrorKind {
+    AddressNotAligned(AddressNotAligned),
+    MapTo(MapToError<Size4KiB>),
+    TryInit(&'static str, TryInitError),
+    TryGet(&'static str, TryGetError),
     UnsupportedPixelFormat(PixelFormat),
     ParameterTooLarge(&'static str, usize),
-    AlreadyInit(&'static str),
-    Uninit(&'static str),
-    WouldBlock(&'static str),
+    Deadlock(&'static str),
     Full,
     NoEnoughMemory,
     XhcNotFound,
     IndexOutOfRange,
-    AddressNotAligned,
-    FrameAllocationFailed,
-    ParentEntryHugePage,
-    PageAlreadyMapped(PhysFrame<Size4KiB>),
     InvalidSlotID,
     InvalidEndpointNumber,
     TransferRingNotSet,
@@ -80,15 +76,14 @@ pub(crate) enum ErrorKind {
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ErrorKind::AddressNotAligned(err) => write!(f, "{}", err),
+            ErrorKind::MapTo(err) => write!(f, "{:?}", err),
+            ErrorKind::TryInit(target, err) => write!(f, "{}: {}", target, err),
+            ErrorKind::TryGet(target, err) => write!(f, "{}: {}", target, err),
             ErrorKind::UnsupportedPixelFormat(pixel_format) => {
                 write!(f, "unsupported pixel format: {:?}", pixel_format)
             }
             ErrorKind::ParameterTooLarge(name, value) => write!(f, "too large {}: {}", name, value),
-            ErrorKind::AlreadyInit(target) => write!(f, "{} has already been initialized", target),
-            ErrorKind::Uninit(target) => write!(f, "{} is uninitialized", target),
-            ErrorKind::WouldBlock(target) => {
-                write!(f, "{} is currently being initialized", target)
-            }
             ErrorKind::Full => write!(f, "buffer full"),
             _ => write!(f, "{:?}", self),
         }
@@ -97,20 +92,15 @@ impl fmt::Display for ErrorKind {
 
 impl From<AddressNotAligned> for Error {
     #[track_caller]
-    fn from(_: AddressNotAligned) -> Self {
-        Error::from(ErrorKind::AddressNotAligned)
+    fn from(err: AddressNotAligned) -> Self {
+        Error::from(ErrorKind::AddressNotAligned(err))
     }
 }
 
 impl From<MapToError<Size4KiB>> for Error {
     #[track_caller]
     fn from(err: MapToError<Size4KiB>) -> Self {
-        let kind = match err {
-            MapToError::FrameAllocationFailed => ErrorKind::FrameAllocationFailed,
-            MapToError::ParentEntryHugePage => ErrorKind::ParentEntryHugePage,
-            MapToError::PageAlreadyMapped(frame) => ErrorKind::PageAlreadyMapped(frame),
-        };
-        Error::from(kind)
+        Error::from(ErrorKind::MapTo(err))
     }
 }
 
@@ -155,14 +145,8 @@ impl<T> ConvertErr for core::result::Result<T, TryGetError> {
     type Output = core::result::Result<T, Error>;
 
     #[track_caller]
-    fn convert_err(self, msg: &'static str) -> Self::Output {
-        self.map_err(|err| {
-            let kind = match err {
-                TryGetError::Uninit => ErrorKind::Uninit(msg),
-                TryGetError::WouldBlock => ErrorKind::WouldBlock(msg),
-            };
-            Error::from(kind)
-        })
+    fn convert_err(self, target: &'static str) -> Self::Output {
+        self.map_err(|err| Error::from(ErrorKind::TryGet(target, err)))
     }
 }
 
@@ -170,13 +154,7 @@ impl<T> ConvertErr for core::result::Result<T, TryInitError> {
     type Output = core::result::Result<T, Error>;
 
     #[track_caller]
-    fn convert_err(self, msg: &'static str) -> Self::Output {
-        self.map_err(|err| {
-            let kind = match err {
-                TryInitError::AlreadyInit => ErrorKind::AlreadyInit(msg),
-                TryInitError::WouldBlock => ErrorKind::WouldBlock(msg),
-            };
-            Error::from(kind)
-        })
+    fn convert_err(self, target: &'static str) -> Self::Output {
+        self.map_err(|err| Error::from(ErrorKind::TryInit(target, err)))
     }
 }

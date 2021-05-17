@@ -97,11 +97,6 @@ fn lock() -> Result<spin::MutexGuard<'static, MouseCursor>> {
         .ok_or(ErrorKind::Deadlock("mouse::MOUSE_CURSOR"))?)
 }
 
-pub(crate) fn init() -> Result<()> {
-    lock()?.draw()?;
-    Ok(())
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MouseEvent {
     displacement: Vector2d<i32>,
@@ -166,6 +161,8 @@ pub(crate) extern "C" fn observer(displacement_x: i8, displacement_y: i8) {
 
 pub(crate) async fn handle_mouse_event() {
     let res = async {
+        lock()?.draw()?;
+
         let mut events = MouseEventStream::new()?;
         while let Some(event) = events.next().await {
             let mut mouse_cursor = lock()?;

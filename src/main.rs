@@ -81,8 +81,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
     xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
 
-    mouse::init().expect("failed to initialize mouse cursor");
-
     println!("Welcome to sabios!");
 
     let mut executor = Executor::new();

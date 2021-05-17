@@ -31,6 +31,8 @@ pub(crate) fn init() -> Result<()> {
         idt.page_fault.set_handler_fn(page_fault_handler);
         idt.general_protection_fault
             .set_handler_fn(general_protection_fault_handler);
+        idt.segment_not_present
+            .set_handler_fn(segment_not_present_handler);
         idt.double_fault.set_handler_fn(double_fault_handler);
         idt[InterruptIndex::Xhci.as_usize()].set_handler_fn(xhc::interrupt_handler);
         idt
@@ -40,7 +42,8 @@ pub(crate) fn init() -> Result<()> {
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    println!("EXCEPTION: BREAKPOINT\n{:#?}", stack_frame);
+    println!("EXCEPTION: BREAKPOINT");
+    println!("{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn page_fault_handler(
@@ -62,6 +65,17 @@ extern "x86-interrupt" fn general_protection_fault_handler(
     error_code: u64,
 ) {
     println!("EXCEPTION: GENERAL PROTECTION FAULT");
+    println!("Error Code: {:x}", error_code);
+    println!("{:#?}", stack_frame);
+
+    crate::hlt_loop();
+}
+
+extern "x86-interrupt" fn segment_not_present_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) {
+    println!("EXCEPTION: STACK NOT PRESENT");
     println!("Error Code: {:x}", error_code);
     println!("{:#?}", stack_frame);
 

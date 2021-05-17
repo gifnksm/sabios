@@ -26,7 +26,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
         }
     }
 
-    let xhc_dev = xhc_dev.ok_or_else(|| make_error!(ErrorKind::XhcNotFound))?;
+    let xhc_dev = xhc_dev.ok_or(ErrorKind::XhcNotFound)?;
     info!("xHC has been found: {}", xhc_dev);
 
     let bsp_local_apic_id = unsafe { *(0xfee00020 as *const u32) } >> 24;
@@ -113,7 +113,7 @@ fn interrupt_handler_inner() -> Result<()> {
         .try_get()
         .convert_err("xhc::XHC")?
         .try_lock()
-        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("xhc::XHC")))?;
+        .ok_or(ErrorKind::WouldBlock("xhc::XHC"))?;
     while xhc.has_event() {
         if let Err(err) = xhc.process_event().map_err(Error::from) {
             error!("error while process_event: {}", err);

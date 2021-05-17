@@ -1,7 +1,6 @@
-use crate::prelude::*;
 use bootloader::boot_info::PixelFormat;
 use conquer_once::{TryGetError, TryInitError};
-use core::fmt;
+use core::{fmt, panic::Location};
 use mikanos_usb::CxxError;
 use x86_64::structures::paging::{
     mapper::MapToError, page::AddressNotAligned, PhysFrame, Size4KiB,
@@ -12,20 +11,21 @@ pub(crate) type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 pub(crate) struct Error {
     kind: ErrorKind,
-    file: &'static str,
-    line: u32,
-    column: u32,
+    location: &'static Location<'static>,
 }
 
 impl Error {
-    #[doc(hidden)]
-    pub(crate) fn _new(kind: ErrorKind, file: &'static str, line: u32, column: u32) -> Self {
-        Self {
-            kind,
-            file,
-            line,
-            column,
-        }
+    #[track_caller]
+    pub(crate) fn new(kind: ErrorKind) -> Self {
+        let location = Location::caller();
+        Self { kind, location }
+    }
+}
+
+impl From<ErrorKind> for Error {
+    #[track_caller]
+    fn from(err: ErrorKind) -> Self {
+        Error::new(err)
     }
 }
 
@@ -34,7 +34,11 @@ impl fmt::Display for Error {
         write!(
             f,
             "{:?}: {}, {}:{}:{}",
-            self.kind, self.kind, self.file, self.line, self.column
+            self.kind,
+            self.kind,
+            self.location.file(),
+            self.location.line(),
+            self.location.column()
         )?;
         Ok(())
     }
@@ -94,22 +98,19 @@ impl fmt::Display for ErrorKind {
 impl From<AddressNotAligned> for Error {
     #[track_caller]
     fn from(_: AddressNotAligned) -> Self {
-        make_error!(ErrorKind::AddressNotAligned)
+        Error::from(ErrorKind::AddressNotAligned)
     }
 }
 
 impl From<MapToError<Size4KiB>> for Error {
     #[track_caller]
     fn from(err: MapToError<Size4KiB>) -> Self {
-        match err {
-            MapToError::FrameAllocationFailed => {
-                make_error!(ErrorKind::FrameAllocationFailed)
-            }
-            MapToError::ParentEntryHugePage => crate::make_error!(ErrorKind::ParentEntryHugePage),
-            MapToError::PageAlreadyMapped(frame) => {
-                make_error!(ErrorKind::PageAlreadyMapped(frame))
-            }
-        }
+        let kind = match err {
+            MapToError::FrameAllocationFailed => ErrorKind::FrameAllocationFailed,
+            MapToError::ParentEntryHugePage => ErrorKind::ParentEntryHugePage,
+            MapToError::PageAlreadyMapped(frame) => ErrorKind::PageAlreadyMapped(frame),
+        };
+        Error::from(kind)
     }
 }
 
@@ -135,21 +136,14 @@ impl From<CxxError> for Error {
             15 => EndpointNotInCharge,
             _ => Unknown,
         };
-        make_error!(kind)
+        Error::from(kind)
     }
 }
 
 #[macro_export]
-macro_rules! make_error {
-    ($kind:expr $(,)?) => {
-        $crate::error::Error::_new($kind, file!(), line!(), column!())
-    };
-}
-
-#[macro_export]
 macro_rules! bail {
-    ($kind:expr) => {
-        return Err($crate::make_error!($kind))
+    ($err:expr) => {
+        return Err($crate::error::Error::from($err))
     };
 }
 pub(crate) trait ConvertErr {
@@ -162,9 +156,12 @@ impl<T> ConvertErr for core::result::Result<T, TryGetError> {
 
     #[track_caller]
     fn convert_err(self, msg: &'static str) -> Self::Output {
-        self.map_err(|err| match err {
-            TryGetError::Uninit => make_error!(ErrorKind::Uninit(msg)),
-            TryGetError::WouldBlock => make_error!(ErrorKind::WouldBlock(msg)),
+        self.map_err(|err| {
+            let kind = match err {
+                TryGetError::Uninit => ErrorKind::Uninit(msg),
+                TryGetError::WouldBlock => ErrorKind::WouldBlock(msg),
+            };
+            Error::from(kind)
         })
     }
 }
@@ -174,9 +171,12 @@ impl<T> ConvertErr for core::result::Result<T, TryInitError> {
 
     #[track_caller]
     fn convert_err(self, msg: &'static str) -> Self::Output {
-        self.map_err(|err| match err {
-            TryInitError::AlreadyInit => make_error!(ErrorKind::AlreadyInit(msg)),
-            TryInitError::WouldBlock => make_error!(ErrorKind::WouldBlock(msg)),
+        self.map_err(|err| {
+            let kind = match err {
+                TryInitError::AlreadyInit => ErrorKind::AlreadyInit(msg),
+                TryInitError::WouldBlock => ErrorKind::WouldBlock(msg),
+            };
+            Error::from(kind)
         })
     }
 }

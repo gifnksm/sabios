@@ -219,7 +219,7 @@ fn scan_function(devices: &mut Devices, bus: u8, device: u8, function: u8) -> Re
             class_code,
             header_type,
         })
-        .map_err(|_| make_error!(ErrorKind::Full))?;
+        .map_err(|_| ErrorKind::Full)?;
 
     if class_code.base == 0x06 && class_code.sub == 0x04 {
         // standard PCI-PCI bridge

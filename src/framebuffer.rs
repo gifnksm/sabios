@@ -13,8 +13,8 @@ static DRAWER: OnceCell<spin::Mutex<Drawer>> = OnceCell::uninit();
 pub(crate) fn init(framebuffer: FrameBuffer) -> Result<()> {
     let original_info = framebuffer.info();
     let pixel_format = original_info.pixel_format;
-    let pixel_drawer = select_pixel_drawer(pixel_format)
-        .ok_or_else(|| make_error!(ErrorKind::UnsupportedPixelFormat(pixel_format)))?;
+    let pixel_drawer =
+        select_pixel_drawer(pixel_format).ok_or(ErrorKind::UnsupportedPixelFormat(pixel_format))?;
 
     let info = ScreenInfo::new(&original_info)?;
 
@@ -37,11 +37,11 @@ pub(crate) fn info() -> Result<&'static ScreenInfo> {
 
 pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>> {
     // consider interrupts
-    DRAWER
+    Ok(DRAWER
         .try_get()
         .convert_err("framebuffer::DRAWER")?
         .try_lock()
-        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("framebuffer::DRAWER")))
+        .ok_or(ErrorKind::WouldBlock("framebuffer::DRAWER"))?)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -55,8 +55,7 @@ pub(crate) struct ScreenInfo {
 impl ScreenInfo {
     fn new(info: &FrameBufferInfo) -> Result<Self> {
         fn usize_to_i32(name: &'static str, value: usize) -> Result<i32> {
-            i32::try_from(value)
-                .map_err(|_e| make_error!(ErrorKind::ParameterTooLarge(name, value)))
+            Ok(i32::try_from(value).map_err(|_e| ErrorKind::ParameterTooLarge(name, value))?)
         }
 
         Ok(Self {

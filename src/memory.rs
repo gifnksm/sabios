@@ -42,9 +42,9 @@ static MEMORY_MANAGER: spin::Mutex<BitmapMemoryManager> = spin::Mutex::new(Bitma
 });
 
 pub(crate) fn lock_memory_manager() -> Result<spin::MutexGuard<'static, BitmapMemoryManager>> {
-    MEMORY_MANAGER
+    Ok(MEMORY_MANAGER
         .try_lock()
-        .ok_or_else(|| make_error!(ErrorKind::WouldBlock("MEMORY_MANAGER")))
+        .ok_or(ErrorKind::WouldBlock("MEMORY_MANAGER"))?)
 }
 
 impl BitmapMemoryManager {

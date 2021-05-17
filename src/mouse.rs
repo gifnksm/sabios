@@ -1,8 +1,17 @@
 use crate::{
-    desktop, framebuffer,
+    desktop,
+    error::ConvertErr as _,
+    framebuffer,
     graphics::{Color, Draw, Point, Vector2d},
     prelude::*,
 };
+use conquer_once::noblock::OnceCell;
+use core::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+use crossbeam_queue::ArrayQueue;
+use futures_util::{task::AtomicWaker, Stream, StreamExt as _};
 
 const MOUSE_CURSOR_WIDTH: usize = 15;
 const MOUSE_CURSOR_HEIGHT: usize = 24;
@@ -93,12 +102,79 @@ pub(crate) fn init() -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MouseEvent {
+    displacement: Vector2d<i32>,
+}
+
+static MOUSE_EVENT_QUEUE: OnceCell<ArrayQueue<MouseEvent>> = OnceCell::uninit();
+static WAKER: AtomicWaker = AtomicWaker::new();
+
+#[derive(Debug)]
+struct MouseEventStream {
+    _private: (),
+}
+
+impl MouseEventStream {
+    fn new() -> Result<Self> {
+        MOUSE_EVENT_QUEUE
+            .try_init_once(|| ArrayQueue::new(100))
+            .convert_err("mouse::EVENT_QUEUE")?;
+        Ok(Self { _private: () })
+    }
+}
+
+impl Stream for MouseEventStream {
+    type Item = MouseEvent;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        #[allow(clippy::expect_used)]
+        let queue = MOUSE_EVENT_QUEUE.try_get().expect("not initialized");
+
+        // fast path
+        if let Some(event) = queue.pop() {
+            return Poll::Ready(Some(event));
+        }
+
+        WAKER.register(&cx.waker());
+        match queue.pop() {
+            Some(event) => {
+                WAKER.take();
+                Poll::Ready(Some(event))
+            }
+            None => Poll::Pending,
+        }
+    }
+}
+
 pub(crate) extern "C" fn observer(displacement_x: i8, displacement_y: i8) {
-    let displacement = Vector2d::new(i32::from(displacement_x), i32::from(displacement_y));
-    #[allow(clippy::expect_used)]
-    let mut mouse_cursor = lock().expect("failed to lock MOUSE_CURSOR");
-    #[allow(clippy::expect_used)]
-    mouse_cursor
-        .move_relative(displacement)
-        .expect("failed to move mouse cursor");
+    let event = MouseEvent {
+        displacement: Vector2d::new(i32::from(displacement_x), i32::from(displacement_y)),
+    };
+    let res = MOUSE_EVENT_QUEUE
+        .try_get()
+        .convert_err("mouse::MOUSE_EVENT_QUEUE")
+        .and_then(|queue| {
+            queue.push(event).map_err(|_| ErrorKind::Full)?;
+            WAKER.wake();
+            Ok(())
+        });
+    if let Err(err) = res {
+        error!("failed to enqueue to the queue: {}", err);
+    }
+}
+
+pub(crate) async fn handle_mouse_event() {
+    let res = async {
+        let mut events = MouseEventStream::new()?;
+        while let Some(event) = events.next().await {
+            let mut mouse_cursor = lock()?;
+            mouse_cursor.move_relative(event.displacement)?;
+        }
+        Ok::<(), Error>(())
+    }
+    .await;
+    if let Err(err) = res {
+        panic!("error occurred during handling mouse cursor event: {}", err);
+    }
 }

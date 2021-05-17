@@ -87,6 +87,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     let mut executor = Executor::new();
     executor.spawn(CoTask::new(xhc::handle_xhc_interrupt()));
+    executor.spawn(CoTask::new(mouse::handle_mouse_event()));
 
     x86_64::instructions::interrupts::enable();
 

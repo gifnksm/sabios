@@ -2,6 +2,7 @@ use crate::{
     error::ConvertErr as _,
     graphics::{Color, Draw, Point, Rectangle},
     prelude::*,
+    util,
 };
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use conquer_once::spin::OnceCell;
@@ -36,12 +37,8 @@ pub(crate) fn info() -> Result<&'static ScreenInfo> {
 }
 
 pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>> {
-    // consider interrupts
-    Ok(DRAWER
-        .try_get()
-        .convert_err("framebuffer::DRAWER")?
-        .try_lock()
-        .ok_or(ErrorKind::Deadlock("framebuffer::DRAWER"))?)
+    // TODO: consider interrupts
+    util::try_get_and_lock(&DRAWER, "framebuffer::DRAWER")
 }
 
 #[derive(Debug, Clone, Copy)]

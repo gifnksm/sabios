@@ -9,6 +9,8 @@
 
 extern crate alloc;
 
+use crate::co_task::CoTask;
+
 use self::{co_task::Executor, prelude::*};
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
@@ -31,6 +33,7 @@ mod mouse;
 mod paging;
 mod pci;
 mod prelude;
+mod util;
 mod xhc;
 
 entry_point!(kernel_main);
@@ -83,6 +86,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     println!("Welcome to sabios!");
 
     let mut executor = Executor::new();
+    executor.spawn(CoTask::new(xhc::handle_xhc_interrupt()));
 
     x86_64::instructions::interrupts::enable();
 

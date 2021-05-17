@@ -4,8 +4,15 @@ use crate::{
     memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
+    util,
 };
 use conquer_once::spin::OnceCell;
+use core::{
+    pin::Pin,
+    sync::atomic::{AtomicBool, Ordering},
+    task::{Context, Poll},
+};
+use futures_util::{task::AtomicWaker, Stream, StreamExt as _};
 use mikanos_usb as usb;
 use volatile::Volatile;
 use x86_64::structures::{idt::InterruptStackFrame, paging::OffsetPageTable};
@@ -102,29 +109,66 @@ fn switch_ehci_to_xhci(devices: &[Device], xhc_dev: &Device) {
     );
 }
 
-pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
-    if let Err(err) = interrupt_handler_inner() {
-        error!("error while interrupt handling: {}", err);
+static INTERRUPTED_FLAG: AtomicBool = AtomicBool::new(false);
+static WAKER: AtomicWaker = AtomicWaker::new();
+
+#[derive(Debug)]
+struct InterruptStream {
+    _private: (),
+}
+
+impl InterruptStream {
+    fn new() -> Self {
+        Self { _private: () }
     }
 }
 
-fn interrupt_handler_inner() -> Result<()> {
-    let mut xhc = XHC
-        .try_get()
-        .convert_err("xhc::XHC")?
-        .try_lock()
-        .ok_or(ErrorKind::Deadlock("xhc::XHC"))?;
-    while xhc.has_event() {
-        if let Err(err) = xhc.process_event().map_err(Error::from) {
-            error!("error while process_event: {}", err);
+impl Stream for InterruptStream {
+    type Item = ();
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // fast path
+        if INTERRUPTED_FLAG.swap(false, Ordering::Relaxed) {
+            return Poll::Ready(Some(()));
+        }
+
+        WAKER.register(&cx.waker());
+        if INTERRUPTED_FLAG.swap(false, Ordering::Relaxed) {
+            WAKER.take();
+            Poll::Ready(Some(()))
+        } else {
+            Poll::Pending
         }
     }
+}
+
+pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
+    INTERRUPTED_FLAG.store(true, Ordering::Relaxed);
+    WAKER.wake();
     notify_end_of_interrupt();
-    Ok(())
 }
 
 fn notify_end_of_interrupt() {
     #[allow(clippy::unwrap_used)]
     let mut memory = Volatile::new(unsafe { (0xfee000b0 as *mut u32).as_mut().unwrap() });
     memory.write(0);
+}
+
+pub(crate) async fn handle_xhc_interrupt() {
+    let res = async {
+        let mut interrupts = InterruptStream::new();
+        while let Some(()) = interrupts.next().await {
+            let mut xhc = util::try_get_and_lock(&XHC, "xhc::XHC")?;
+            while xhc.has_event() {
+                if let Err(err) = xhc.process_event().map_err(Error::from) {
+                    error!("error while process_event: {}", err);
+                }
+            }
+        }
+        Ok::<(), Error>(())
+    }
+    .await;
+    if let Err(err) = res {
+        panic!("error occurred during handling xhc interruption: {}", err);
+    }
 }

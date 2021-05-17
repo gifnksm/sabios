@@ -798,6 +798,7 @@ dependencies = [
  "conquer-once",
  "crossbeam-queue",
  "custom_debug_derive",
+ "futures-util",
  "linked_list_allocator",
  "mikanos_usb",
  "num-traits",

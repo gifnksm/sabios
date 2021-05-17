@@ -2,7 +2,7 @@ use crate::{error::ConvertErr as _, prelude::*};
 use conquer_once::spin::OnceCell;
 use x86_64::{
     instructions::segmentation,
-    structures::gdt::{Descriptor, GlobalDescriptorTable},
+    structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
 };
 
 static GDT: OnceCell<GlobalDescriptorTable> = OnceCell::uninit();
@@ -17,6 +17,15 @@ pub(crate) fn init() -> Result<()> {
         gdt
     });
     GDT.try_get().convert_err("gdt::GDT")?.load();
+
+    let null_segment = SegmentSelector::new(0, x86_64::PrivilegeLevel::Ring0);
+
+    unsafe {
+        segmentation::load_ds(null_segment);
+        segmentation::load_es(null_segment);
+        segmentation::load_fs(null_segment);
+        segmentation::load_gs(null_segment);
+    }
 
     if let Some(stack_selector) = stack_selector {
         unsafe { segmentation::load_ss(stack_selector) };

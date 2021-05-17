@@ -9,12 +9,13 @@
 
 extern crate alloc;
 
-use self::prelude::*;
+use self::{co_task::Executor, prelude::*};
 use bootloader::{boot_info::Optional, entry_point, BootInfo};
 use core::mem;
 use x86_64::VirtAddr;
 
 mod allocator;
+mod co_task;
 mod console;
 mod cxx_support;
 mod desktop;
@@ -81,9 +82,11 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     println!("Welcome to sabios!");
 
+    let mut executor = Executor::new();
+
     x86_64::instructions::interrupts::enable();
 
-    hlt_loop();
+    executor.run();
 }
 
 fn hlt_loop() -> ! {

@@ -58,7 +58,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let mut allocator = memory::lock_memory_manager().expect("failed to lock memory manager");
 
         allocator
-            .init(boot_info.memory_regions.iter().copied())
+            .init(&*boot_info.memory_regions)
             .expect("failed to initialize bitmap memory manager");
 
         // Map CPU register addresses as identity mapping

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2018"
 build = "build.rs"
 links = "mikanos_usb"
+resolver = "2"
 
 [build-dependencies]
 cc = "1.0.67"

@@ -2,6 +2,7 @@
 name = "boot"
 version = "0.1.0"
 edition = "2018"
+resolver = "2"
 
 [dependencies]
 bootloader-locator = "0.0.4"

@@ -48,6 +48,8 @@ pub(crate) enum ErrorKind {
     MapTo(MapToError<Size4KiB>),
     TryInit(&'static str, TryInitError),
     TryGet(&'static str, TryGetError),
+    FrameBufferNotSupported,
+    PhysicalMemoryNotMapped,
     UnsupportedPixelFormat(PixelFormat),
     ParameterTooLarge(&'static str, usize),
     Deadlock(&'static str),

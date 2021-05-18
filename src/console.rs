@@ -1,8 +1,14 @@
 use crate::{
     desktop, font, framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
+    layer::{self, Layer, LayerEvent},
+    prelude::*,
+    sync::mpsc,
+    window::{Window, WindowDrawer},
 };
+use alloc::sync::Arc;
 use core::{convert::TryFrom, fmt};
+use futures_util::StreamExt as _;
 use x86_64::instructions::interrupts;
 
 #[macro_export]
@@ -21,13 +27,13 @@ pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write as _;
 
     interrupts::without_interrupts(|| {
-        if let Ok(mut framebuffer) = framebuffer::lock_drawer() {
-            if let Some(mut console) = CONSOLE.try_lock() {
+        if let Some(mut console) = CONSOLE.try_lock() {
+            let _ = console.with_writer(|mut writer| {
                 #[allow(clippy::unwrap_used)]
-                console.writer(&mut *framebuffer).write_fmt(args).unwrap();
-            }
+                writer.write_fmt(args).unwrap();
+            });
         }
-    });
+    })
 }
 
 const ROWS: usize = 25;
@@ -38,6 +44,7 @@ static CONSOLE: spin::Mutex<Console> = spin::Mutex::new(Console {
     fg_color: desktop::FG_COLOR,
     bg_color: desktop::BG_COLOR,
     cursor: Point::new(0, 0),
+    window_drawer: None,
 });
 
 pub(crate) struct Console {
@@ -45,6 +52,7 @@ pub(crate) struct Console {
     fg_color: Color,
     bg_color: Color,
     cursor: Point<usize>,
+    window_drawer: Option<(Arc<spin::Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
 }
 
 struct RedrawArea {
@@ -60,6 +68,16 @@ impl RedrawArea {
                 size: Size::new(0, 0),
             },
             fill_bg: false,
+        }
+    }
+
+    fn all(fill_bg: bool) -> Self {
+        Self {
+            area: Rectangle {
+                pos: Point::new(0, 0),
+                size: Size::new(COLUMNS, ROWS),
+            },
+            fill_bg,
         }
     }
 
@@ -113,23 +131,75 @@ impl Console {
         };
     }
 
-    pub(crate) fn writer<'d, 'c, D>(&'c mut self, drawer: &'d mut D) -> ConsoleWriter<'d, 'c, D> {
-        ConsoleWriter {
-            drawer,
-            console: self,
+    fn set_window_drawer(
+        &mut self,
+        drawer: Option<(Arc<spin::Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
+    ) -> Result<()> {
+        self.window_drawer = drawer;
+        self.refresh()?;
+        Ok(())
+    }
+
+    fn refresh(&mut self) -> Result<()> {
+        self.with_writer(|mut writer| {
+            writer.redraw(RedrawArea::all(true));
+        })
+    }
+
+    fn with_writer(&'_ mut self, f: impl FnOnce(ConsoleWriter<'_, '_>)) -> Result<()> {
+        assert!(!interrupts::are_enabled());
+
+        if let Some((window_drawer, tx)) = self.window_drawer.clone() {
+            let drawer = Drawer::Window(
+                window_drawer
+                    .try_lock()
+                    .ok_or(ErrorKind::Deadlock("window_drawer"))?,
+            );
+            let writer = ConsoleWriter {
+                drawer,
+                console: self,
+            };
+            f(writer);
+            tx.send(())?;
+        } else {
+            let drawer = Drawer::FrameBuffer(framebuffer::lock_drawer()?);
+            let writer = ConsoleWriter {
+                drawer,
+                console: self,
+            };
+            f(writer);
+        }
+        Ok(())
+    }
+}
+
+enum Drawer<'a> {
+    FrameBuffer(spin::MutexGuard<'static, framebuffer::Drawer>),
+    Window(spin::MutexGuard<'a, WindowDrawer>),
+}
+
+impl Draw for Drawer<'_> {
+    fn area(&self) -> Rectangle<i32> {
+        match self {
+            Self::FrameBuffer(drawer) => drawer.area(),
+            Self::Window(drawer) => drawer.area(),
+        }
+    }
+
+    fn draw(&mut self, p: Point<i32>, c: Color) {
+        match self {
+            Self::FrameBuffer(drawer) => drawer.draw(p, c),
+            Self::Window(drawer) => drawer.draw(p, c),
         }
     }
 }
 
-pub(crate) struct ConsoleWriter<'d, 'c, D> {
-    drawer: &'d mut D,
+pub(crate) struct ConsoleWriter<'d, 'c> {
+    drawer: Drawer<'d>,
     console: &'c mut Console,
 }
 
-impl<'d, 'c, D> ConsoleWriter<'d, 'c, D>
-where
-    D: Draw,
-{
+impl<'d, 'c> ConsoleWriter<'d, 'c> {
     fn to_draw_point(&self, p: Point<usize>) -> Point<i32> {
         let font_size = font::FONT_PIXEL_SIZE;
         #[allow(clippy::unwrap_used)]
@@ -145,14 +215,8 @@ where
             size: self.to_draw_point(rect.size),
         }
     }
-}
 
-impl<'d, 'c, D> fmt::Write for ConsoleWriter<'d, 'c, D>
-where
-    D: Draw,
-{
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        let redraw = self.console.write_str(s);
+    fn redraw(&mut self, redraw: RedrawArea) {
         if redraw.fill_bg {
             let rect = self.to_draw_rect(redraw.area);
             self.drawer.fill_rect(rect, self.console.bg_color);
@@ -164,9 +228,61 @@ where
 
             let bytes = &self.console.buffer[console_y][x_range];
             let draw_p = self.to_draw_point(console_p);
-            font::draw_byte_str(self.drawer, draw_p, bytes, self.console.fg_color);
+            font::draw_byte_str(&mut self.drawer, draw_p, bytes, self.console.fg_color);
+        }
+    }
+}
+
+impl<'d, 'c> fmt::Write for ConsoleWriter<'d, 'c> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let redraw = self.console.write_str(s);
+        self.redraw(redraw);
+        Ok(())
+    }
+}
+
+pub(crate) async fn handler_task() {
+    let res = async {
+        let font_size = font::FONT_PIXEL_SIZE;
+        let window_size = Size::new(COLUMNS as i32 * font_size.x, ROWS as i32 * font_size.y);
+        let window = Window::new(window_size);
+        let (tx, mut rx) = mpsc::channel(100);
+        {
+            let drawer = window
+                .try_lock()
+                .ok_or(ErrorKind::Deadlock("window"))?
+                .drawer();
+            interrupts::without_interrupts(|| {
+                CONSOLE
+                    .try_lock()
+                    .ok_or(ErrorKind::Deadlock("console::CONSOLE"))?
+                    .set_window_drawer(Some((drawer, tx)))?;
+                Ok::<(), Error>(())
+            })?;
         }
 
-        Ok(())
+        let mut layer = Layer::new();
+        let layer_id = layer.id();
+        layer.set_window(Some(window));
+        layer.move_to(Point::new(0, 0));
+
+        let layer_tx = layer::event_tx()?;
+        layer_tx.send(LayerEvent::Register { layer })?;
+        layer_tx.send(LayerEvent::SetHeight {
+            layer_id,
+            height: layer::CONSOLE_HEIGHT,
+        })?;
+        layer_tx.send(LayerEvent::Draw {})?;
+
+        while let Some(()) = rx.next().await {
+            layer_tx.send(LayerEvent::Draw {})?;
+        }
+
+        Ok::<(), Error>(())
+    }
+    .await;
+
+    if let Err(err) = res {
+        panic!("error occurred during handling console vent: {}", err);
     }
 }

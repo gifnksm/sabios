@@ -1,6 +1,7 @@
 use crate::{
+    desktop,
     error::ConvertErr as _,
-    graphics::{Color, Draw, Point, Rectangle},
+    graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
     util,
 };
@@ -19,11 +20,13 @@ pub(crate) fn init(framebuffer: FrameBuffer) -> Result<()> {
 
     let info = ScreenInfo::new(&original_info)?;
 
-    let drawer = Drawer {
+    let mut drawer = Drawer {
         framebuffer,
         info,
         pixel_drawer,
     };
+
+    drawer.fill_rect(info.area(), desktop::BG_COLOR);
 
     INFO.try_init_once(|| info)
         .convert_err("framebuffer::INFO")?;
@@ -37,7 +40,6 @@ pub(crate) fn info() -> Result<&'static ScreenInfo> {
 }
 
 pub(crate) fn lock_drawer() -> Result<spin::MutexGuard<'static, Drawer>> {
-    // TODO: consider interrupts
     util::try_get_and_lock(&DRAWER, "framebuffer::DRAWER")
 }
 
@@ -62,6 +64,14 @@ impl ScreenInfo {
             bytes_per_pixel: usize_to_i32("byte_per_pixel", info.bytes_per_pixel)?,
         })
     }
+
+    pub(crate) fn area(&self) -> Rectangle<i32> {
+        Rectangle::new(Point::new(0, 0), self.size())
+    }
+
+    pub(crate) fn size(&self) -> Size<i32> {
+        Size::new(self.width, self.height)
+    }
 }
 
 pub(crate) struct Drawer {
@@ -71,9 +81,9 @@ pub(crate) struct Drawer {
 }
 
 impl Draw for Drawer {
-    fn area(&self) -> crate::graphics::Rectangle<i32> {
+    fn area(&self) -> Rectangle<i32> {
         Rectangle {
-            pos: Point::new(0i32, 0i32),
+            pos: Point::new(0, 0),
             size: Point::new(self.info.width, self.info.height),
         }
     }

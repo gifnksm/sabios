@@ -184,6 +184,10 @@ pub(crate) trait Draw {
     fn area(&self) -> Rectangle<i32>;
     fn draw(&mut self, p: Point<i32>, c: Color);
 
+    fn size(&self) -> Size<i32> {
+        self.area().size
+    }
+
     fn fill_rect(&mut self, rect: Rectangle<i32>, c: Color) {
         for p in rect.points() {
             self.draw(p, c);

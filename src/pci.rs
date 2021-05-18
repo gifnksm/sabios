@@ -210,16 +210,16 @@ fn scan_function(devices: &mut Devices, bus: u8, device: u8, function: u8) -> Re
     let vendor_id = read_vendor_id(bus, device, function);
     let class_code = read_class_code(bus, device, function);
     let header_type = read_header_type(bus, device, function);
-    devices
-        .try_push(Device {
-            bus,
-            device,
-            function,
-            vendor_id,
-            class_code,
-            header_type,
-        })
-        .map_err(|_| ErrorKind::Full)?;
+    let dev = Device {
+        bus,
+        device,
+        function,
+        vendor_id,
+        class_code,
+        header_type,
+    };
+    debug!("{}", dev);
+    devices.try_push(dev).map_err(|_| ErrorKind::Full)?;
 
     if class_code.base == 0x06 && class_code.sub == 0x04 {
         // standard PCI-PCI bridge

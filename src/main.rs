@@ -9,10 +9,14 @@
 
 extern crate alloc;
 
-use crate::co_task::CoTask;
-
-use self::{co_task::Executor, prelude::*};
-use bootloader::{boot_info::Optional, entry_point, BootInfo};
+use self::{
+    co_task::{CoTask, Executor},
+    prelude::*,
+};
+use bootloader::{
+    boot_info::{FrameBuffer, Optional},
+    entry_point, BootInfo,
+};
 use core::mem;
 use x86_64::VirtAddr;
 
@@ -27,13 +31,16 @@ mod framebuffer;
 mod gdt;
 mod graphics;
 mod interrupt;
+mod layer;
 mod log;
 mod memory;
 mod mouse;
 mod paging;
 mod pci;
 mod prelude;
+mod sync;
 mod util;
+mod window;
 mod xhc;
 
 entry_point!(kernel_main);
@@ -42,22 +49,14 @@ entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     log::set_level(log::Level::Info);
 
-    let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
-        .into_option()
-        .expect("framebuffer not supported");
+    let (framebuffer, physical_memory_offset) =
+        extract_boot_info(boot_info).expect("failed to extract boot_info");
+
+    // Initialize framebuffer for boot log
     framebuffer::init(framebuffer).expect("failed to initialize framebuffer");
 
-    let physical_memory_offset = boot_info
-        .physical_memory_offset
-        .as_ref()
-        .copied()
-        .expect("physical memory is not mapped");
-
-    let physical_memory_offset = VirtAddr::new(physical_memory_offset);
+    // Initialize memory mapping / frame allocator / heap
     let mut mapper = unsafe { paging::init(physical_memory_offset) };
-
-    desktop::draw().expect("failed to draw desktop");
-
     {
         let mut allocator = memory::lock_memory_manager().expect("failed to lock memory manager");
 
@@ -72,24 +71,42 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         allocator::init_heap(&mut mapper, &mut *allocator).expect("failed to initialize heap");
     }
 
+    // Initialize GDT/IDT
     gdt::init().expect("failed to init gdt");
     interrupt::init().expect("failed to init interrupts");
 
+    // Initialize PCI devices
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
-    for device in &devices {
-        debug!("{}", device);
-    }
     xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
 
-    println!("Welcome to sabios!");
-
+    // Initialize executor & co-tasks
     let mut executor = Executor::new();
-    executor.spawn(CoTask::new(xhc::handle_xhc_interrupt()));
-    executor.spawn(CoTask::new(mouse::handle_mouse_event()));
+    executor.spawn(CoTask::new(xhc::handler_task()));
+    executor.spawn(CoTask::new(mouse::handler_task()));
+    executor.spawn(CoTask::new(desktop::handler_task()));
+    executor.spawn(CoTask::new(console::handler_task()));
+    executor.spawn(CoTask::new(layer::handler_task()));
 
     x86_64::instructions::interrupts::enable();
 
+    // Start running
+    println!("Welcome to sabios!");
     executor.run();
+}
+
+fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr)> {
+    let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
+        .into_option()
+        .ok_or(ErrorKind::FrameBufferNotSupported)?;
+
+    let physical_memory_offset = boot_info
+        .physical_memory_offset
+        .as_ref()
+        .copied()
+        .ok_or(ErrorKind::PhysicalMemoryNotMapped)?;
+    let physical_memory_offset = VirtAddr::new(physical_memory_offset);
+
+    Ok((framebuffer, physical_memory_offset))
 }
 
 fn hlt_loop() -> ! {

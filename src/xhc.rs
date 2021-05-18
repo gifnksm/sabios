@@ -154,7 +154,7 @@ fn notify_end_of_interrupt() {
     memory.write(0);
 }
 
-pub(crate) async fn handle_xhc_interrupt() {
+pub(crate) async fn handler_task() {
     let res = async {
         let mut interrupts = InterruptStream::new();
         while let Some(()) = interrupts.next().await {

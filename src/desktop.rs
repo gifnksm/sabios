@@ -30,7 +30,7 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
 
 pub(crate) async fn handler_task() {
     let res = async {
-        let screen_info = *framebuffer::info()?;
+        let screen_info = *framebuffer::info();
         let window = Window::new(screen_info.size());
 
         {
@@ -44,7 +44,7 @@ pub(crate) async fn handler_task() {
         layer.set_window(Some(window));
         layer.move_to(Point::new(0, 0));
 
-        let tx = layer::event_tx()?;
+        let tx = layer::event_tx();
         tx.send(LayerEvent::Register { layer })?;
         tx.send(LayerEvent::SetHeight {
             layer_id,

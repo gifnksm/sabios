@@ -46,8 +46,8 @@ impl fmt::Display for Error {
 pub(crate) enum ErrorKind {
     AddressNotAligned(AddressNotAligned),
     MapTo(MapToError<Size4KiB>),
-    TryInit(&'static str, TryInitError),
-    TryGet(&'static str, TryGetError),
+    TryInit(TryInitError),
+    TryGet(TryGetError),
     FrameBufferNotSupported,
     PhysicalMemoryNotMapped,
     UnsupportedPixelFormat(PixelFormat),
@@ -80,8 +80,8 @@ impl fmt::Display for ErrorKind {
         match self {
             ErrorKind::AddressNotAligned(err) => write!(f, "{}", err),
             ErrorKind::MapTo(err) => write!(f, "{:?}", err),
-            ErrorKind::TryInit(target, err) => write!(f, "{}: {}", target, err),
-            ErrorKind::TryGet(target, err) => write!(f, "{}: {}", target, err),
+            ErrorKind::TryInit(err) => write!(f, "{}", err),
+            ErrorKind::TryGet(err) => write!(f, "{}", err),
             ErrorKind::UnsupportedPixelFormat(pixel_format) => {
                 write!(f, "unsupported pixel format: {:?}", pixel_format)
             }
@@ -103,6 +103,20 @@ impl From<MapToError<Size4KiB>> for Error {
     #[track_caller]
     fn from(err: MapToError<Size4KiB>) -> Self {
         Error::from(ErrorKind::MapTo(err))
+    }
+}
+
+impl From<TryInitError> for Error {
+    #[track_caller]
+    fn from(err: TryInitError) -> Self {
+        Error::from(ErrorKind::TryInit(err))
+    }
+}
+
+impl From<TryGetError> for Error {
+    #[track_caller]
+    fn from(err: TryGetError) -> Self {
+        Error::from(ErrorKind::TryGet(err))
     }
 }
 
@@ -137,26 +151,4 @@ macro_rules! bail {
     ($err:expr) => {
         return Err($crate::error::Error::from($err))
     };
-}
-pub(crate) trait ConvertErr {
-    type Output;
-    fn convert_err(self, msg: &'static str) -> Self::Output;
-}
-
-impl<T> ConvertErr for core::result::Result<T, TryGetError> {
-    type Output = core::result::Result<T, Error>;
-
-    #[track_caller]
-    fn convert_err(self, target: &'static str) -> Self::Output {
-        self.map_err(|err| Error::from(ErrorKind::TryGet(target, err)))
-    }
-}
-
-impl<T> ConvertErr for core::result::Result<T, TryInitError> {
-    type Output = core::result::Result<T, Error>;
-
-    #[track_caller]
-    fn convert_err(self, target: &'static str) -> Self::Output {
-        self.map_err(|err| Error::from(ErrorKind::TryInit(target, err)))
-    }
 }

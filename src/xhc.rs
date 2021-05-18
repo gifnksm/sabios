@@ -1,13 +1,10 @@
 use crate::{
-    error::ConvertErr as _,
     interrupt::InterruptIndex,
     memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
-    sync::mutex::Mutex,
-    util,
+    sync::{mutex::Mutex, once_cell::OnceCell},
 };
-use conquer_once::noblock::OnceCell;
 use core::{
     pin::Pin,
     sync::atomic::{AtomicBool, Ordering},
@@ -69,8 +66,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
 
     xhc.configure_connected_ports();
 
-    XHC.try_init_once(move || Mutex::new(xhc))
-        .convert_err("xhc::XHC")?;
+    XHC.init_once(move || Mutex::new(xhc));
 
     Ok(())
 }
@@ -159,7 +155,7 @@ pub(crate) async fn handler_task() {
     let res = async {
         let mut interrupts = InterruptStream::new();
         while let Some(()) = interrupts.next().await {
-            let mut xhc = util::try_get_and_lock(&XHC, "xhc::XHC")?;
+            let mut xhc = XHC.get().lock();
             while xhc.has_event() {
                 if let Err(err) = xhc.process_event().map_err(Error::from) {
                     error!("error while process_event: {}", err);

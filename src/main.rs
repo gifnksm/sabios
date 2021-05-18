@@ -39,7 +39,6 @@ mod paging;
 mod pci;
 mod prelude;
 mod sync;
-mod util;
 mod window;
 mod xhc;
 
@@ -72,8 +71,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
 
     // Initialize GDT/IDT
-    gdt::init().expect("failed to init gdt");
-    interrupt::init().expect("failed to init interrupts");
+    gdt::init();
+    interrupt::init();
 
     // Initialize PCI devices
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");

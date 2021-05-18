@@ -1,12 +1,10 @@
 use crate::{
-    error::ConvertErr as _,
     graphics::{Color, Draw, Point, Vector2d},
     layer::{self, Layer, LayerEvent},
     prelude::*,
-    sync::mpsc,
+    sync::{mpsc, once_cell::OnceCell},
     window::Window,
 };
-use conquer_once::noblock::OnceCell;
 use core::future::Future;
 use futures_util::StreamExt as _;
 
@@ -55,10 +53,7 @@ pub(crate) extern "C" fn observer(displacement_x: i8, displacement_y: i8) {
         displacement: Vector2d::new(i32::from(displacement_x), i32::from(displacement_y)),
     };
 
-    let res = MOUSE_EVENT_TX
-        .try_get()
-        .convert_err("mouse::MOUSE_EVENT_QUEUE")
-        .and_then(|tx| tx.send(event));
+    let res = MOUSE_EVENT_TX.try_get().and_then(|tx| tx.send(event));
 
     if let Err(err) = res {
         error!("failed to enqueue to the queue: {}", err);
@@ -82,10 +77,7 @@ fn draw(drawer: &mut dyn Draw) {
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
     // Initialize MOUSE_EVENT_TX before co-task starts
     let (tx, mut rx) = mpsc::channel(100);
-    #[allow(clippy::expect_used)]
-    MOUSE_EVENT_TX
-        .try_init_once(|| tx)
-        .expect("failed to initialize mouse::MOUSE_EVENT_TX");
+    MOUSE_EVENT_TX.init_once(|| tx);
 
     async move {
         let res = async {
@@ -106,7 +98,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             layer.set_window(Some(window));
             layer.move_to(Point::new(300, 200));
 
-            let tx = layer::event_tx()?;
+            let tx = layer::event_tx();
             tx.send(LayerEvent::Register { layer })?;
             tx.send(LayerEvent::SetHeight {
                 layer_id,

@@ -1,13 +1,13 @@
 use crate::{
     desktop,
-    error::ConvertErr as _,
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
-    sync::mutex::{Mutex, MutexGuard},
-    util,
+    sync::{
+        mutex::{Mutex, MutexGuard},
+        once_cell::OnceCell,
+    },
 };
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
-use conquer_once::noblock::OnceCell;
 use core::convert::TryFrom;
 
 static INFO: OnceCell<ScreenInfo> = OnceCell::uninit();
@@ -29,19 +29,17 @@ pub(crate) fn init(framebuffer: FrameBuffer) -> Result<()> {
 
     drawer.fill_rect(info.area(), desktop::BG_COLOR);
 
-    INFO.try_init_once(|| info)
-        .convert_err("framebuffer::INFO")?;
-    DRAWER
-        .try_init_once(|| Mutex::new(drawer))
-        .convert_err("framebuffer::DRAWER")?;
+    INFO.init_once(|| info);
+    DRAWER.init_once(|| Mutex::new(drawer));
     Ok(())
 }
-pub(crate) fn info() -> Result<&'static ScreenInfo> {
-    INFO.try_get().convert_err("framebuffer::INFO")
+
+pub(crate) fn info() -> &'static ScreenInfo {
+    INFO.get()
 }
 
-pub(crate) fn lock_drawer() -> Result<MutexGuard<'static, Drawer>> {
-    util::try_get_and_lock(&DRAWER, "framebuffer::DRAWER")
+pub(crate) fn lock_drawer() -> MutexGuard<'static, Drawer> {
+    DRAWER.get().lock()
 }
 
 #[derive(Debug, Clone, Copy)]

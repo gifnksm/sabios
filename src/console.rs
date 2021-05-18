@@ -161,7 +161,7 @@ impl Console {
             f(writer);
             tx.send(())?;
         } else {
-            let drawer = Drawer::FrameBuffer(framebuffer::lock_drawer()?);
+            let drawer = Drawer::FrameBuffer(framebuffer::lock_drawer());
             let writer = ConsoleWriter {
                 drawer,
                 console: self,
@@ -259,7 +259,7 @@ pub(crate) async fn handler_task() {
         layer.set_window(Some(window));
         layer.move_to(Point::new(0, 0));
 
-        let layer_tx = layer::event_tx()?;
+        let layer_tx = layer::event_tx();
         layer_tx.send(LayerEvent::Register { layer })?;
         layer_tx.send(LayerEvent::SetHeight {
             layer_id,

@@ -1,13 +1,11 @@
 use crate::{
-    error::ConvertErr as _,
     framebuffer,
     graphics::{Draw, Point, Vector2d},
     prelude::*,
-    sync::{mpsc, mutex::Mutex},
+    sync::{mpsc, mutex::Mutex, once_cell::OnceCell},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
-use conquer_once::spin::OnceCell;
 use core::{
     future::Future,
     sync::atomic::{AtomicU32, Ordering},
@@ -149,20 +147,14 @@ pub(crate) enum LayerEvent {
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();
 
-pub(crate) fn event_tx() -> Result<mpsc::Sender<LayerEvent>> {
-    Ok(LAYER_EVENT_TX
-        .try_get()
-        .convert_err("layer::LAYER_EVENT_TX")?
-        .clone())
+pub(crate) fn event_tx() -> mpsc::Sender<LayerEvent> {
+    LAYER_EVENT_TX.get().clone()
 }
 
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
     // Initialize LAYER_EVENT_TX before co-task starts
     let (tx, mut rx) = mpsc::channel(100);
-    #[allow(clippy::expect_used)]
-    LAYER_EVENT_TX
-        .try_init_once(|| tx)
-        .expect("failed to initialize layer::LAYER_EVENT_TX");
+    LAYER_EVENT_TX.init_once(|| tx);
 
     async move {
         let res = async {
@@ -171,7 +163,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),
                     LayerEvent::Draw {} => {
-                        let mut framebuffer = framebuffer::lock_drawer()?;
+                        let mut framebuffer = framebuffer::lock_drawer();
                         layer_manager.draw(&mut *framebuffer);
                     }
                     // LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),

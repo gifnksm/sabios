@@ -127,7 +127,9 @@ pub(crate) enum LayerEvent {
     Register {
         layer: Layer,
     },
-    Draw {},
+    Draw {
+        bench: bool,
+    },
     // MoveTo {
     //     layer_id: LayerId,
     //     pos: Point<i32>,
@@ -162,9 +164,16 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),
-                    LayerEvent::Draw {} => {
+                    LayerEvent::Draw { bench } => {
+                        use crate::timer::lapic;
                         let mut framebuffer = framebuffer::lock_drawer();
+                        lapic::start();
                         layer_manager.draw(&mut *framebuffer);
+                        let elapsed = lapic::elapsed();
+                        lapic::stop();
+                        if bench {
+                            crate::println!("{}", elapsed);
+                        }
                     }
                     // LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
                     LayerEvent::MoveRelative { layer_id, diff } => {

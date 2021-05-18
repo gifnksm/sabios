@@ -50,7 +50,7 @@ pub(crate) async fn handler_task() {
             layer_id,
             height: layer::DESKTOP_HEIGHT,
         })?;
-        tx.send(LayerEvent::Draw {})?;
+        tx.send(LayerEvent::Draw { bench: false })?;
 
         Ok::<(), Error>(())
     }

@@ -265,10 +265,10 @@ pub(crate) async fn handler_task() {
             layer_id,
             height: layer::CONSOLE_HEIGHT,
         })?;
-        layer_tx.send(LayerEvent::Draw {})?;
+        layer_tx.send(LayerEvent::Draw { bench: false })?;
 
         while let Some(()) = rx.next().await {
-            layer_tx.send(LayerEvent::Draw {})?;
+            layer_tx.send(LayerEvent::Draw { bench: false })?;
         }
 
         Ok::<(), Error>(())

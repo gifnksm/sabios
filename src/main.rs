@@ -40,6 +40,7 @@ mod paging;
 mod pci;
 mod prelude;
 mod sync;
+mod timer;
 mod window;
 mod xhc;
 
@@ -79,6 +80,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let devices = pci::scan_all_bus().expect("failed to scan PCI devices");
     xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
 
+    // Initialize LAPIC timer
+    timer::lapic::init();
+
     // Initialize executor & co-tasks
     let mut executor = Executor::new();
     executor.spawn(CoTask::new(xhc::handler_task()));
@@ -91,6 +95,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // Start running
     println!("Welcome to sabios!");
+
     executor.run();
 }
 

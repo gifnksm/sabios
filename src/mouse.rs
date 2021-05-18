@@ -104,14 +104,14 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 layer_id,
                 height: layer::MOUSE_CURSOR_HEIGHT,
             })?;
-            tx.send(LayerEvent::Draw {})?;
+            tx.send(LayerEvent::Draw { bench: true })?;
 
             while let Some(event) = rx.next().await {
                 tx.send(LayerEvent::MoveRelative {
                     layer_id,
                     diff: event.displacement,
                 })?;
-                tx.send(LayerEvent::Draw {})?;
+                tx.send(LayerEvent::Draw { bench: true })?;
             }
 
             Ok::<(), Error>(())

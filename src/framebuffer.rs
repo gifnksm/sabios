@@ -42,6 +42,15 @@ pub(crate) fn lock_drawer() -> MutexGuard<'static, Drawer> {
     DRAWER.get().lock()
 }
 
+pub(crate) unsafe fn emergency_lock_drawer() -> MutexGuard<'static, Drawer> {
+    let drawer = DRAWER.get();
+    if let Ok(drawer) = drawer.try_lock() {
+        return drawer;
+    }
+    unsafe { drawer.force_unlock() };
+    drawer.lock()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ScreenInfo {
     pub(crate) width: i32,

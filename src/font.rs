@@ -47,13 +47,13 @@ pub(crate) fn char_to_byte(ch: char) -> u8 {
     u8::try_from(codepoint).unwrap_or(b'?')
 }
 
-// pub(crate) fn draw_char<D>(drawer: &mut D, pos: Point<i32>, ch: char, color: Color)
-// where
-//     D: Draw,
-// {
-//     let byte = char_to_byte(ch);
-//     draw_byte(drawer, pos, byte, color)
-// }
+pub(crate) fn draw_char<D>(drawer: &mut D, pos: Point<i32>, ch: char, color: Color)
+where
+    D: Draw,
+{
+    let byte = char_to_byte(ch);
+    draw_byte(drawer, pos, byte, color)
+}
 
 // pub(crate) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
 // where

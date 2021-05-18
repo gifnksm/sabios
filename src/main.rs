@@ -25,6 +25,7 @@ mod co_task;
 mod console;
 mod cxx_support;
 mod desktop;
+mod emergency_console;
 mod error;
 mod font;
 mod framebuffer;
@@ -117,6 +118,8 @@ fn hlt_loop() -> ! {
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    error!("{}", info);
-    hlt_loop();
+    use core::fmt::Write as _;
+    emergency_console::with_console(|console| {
+        let _ = write!(console, "{}", info);
+    });
 }

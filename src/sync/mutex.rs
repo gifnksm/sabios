@@ -26,4 +26,8 @@ where
     pub(crate) fn try_lock(&self) -> Result<MutexGuard<'_, T>> {
         Ok(self.0.try_lock().ok_or(ErrorKind::Deadlock)?)
     }
+
+    pub(crate) unsafe fn force_unlock(&self) {
+        unsafe { self.0.force_unlock() }
+    }
 }

@@ -1,4 +1,5 @@
-use crate::{println, sync::once_cell::OnceCell, xhc};
+use crate::{emergency_console, println, sync::once_cell::OnceCell, xhc};
+use core::fmt::Write as _;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 #[derive(Debug, Clone, Copy)]
@@ -50,42 +51,43 @@ extern "x86-interrupt" fn page_fault_handler(
 ) {
     use x86_64::registers::control::Cr2;
 
-    println!("EXCEPTION: PAGE FAULT");
-    println!("Accessed Address: {:?}", Cr2::read());
-    println!("Error Code: {:x}", error_code);
-    println!("{:#?}", stack_frame);
-
-    crate::hlt_loop();
+    emergency_console::with_console(|console| {
+        let _ = writeln!(console, "EXCEPTION: PAGE FAULT");
+        let _ = writeln!(console, "Accessed Address: {:?}", Cr2::read());
+        let _ = writeln!(console, "Error Code: {:x}", error_code);
+        let _ = writeln!(console, "{:#?}", stack_frame);
+    });
 }
 
 extern "x86-interrupt" fn general_protection_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
-    println!("EXCEPTION: GENERAL PROTECTION FAULT");
-    println!("Error Code: {:x}", error_code);
-    println!("{:#?}", stack_frame);
-
-    crate::hlt_loop();
+    emergency_console::with_console(|console| {
+        let _ = writeln!(console, "EXCEPTION: GENERAL PROTECTION FAULT");
+        let _ = writeln!(console, "Error Code: {:x}", error_code);
+        let _ = writeln!(console, "{:#?}", stack_frame);
+    });
 }
 
 extern "x86-interrupt" fn segment_not_present_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
-    println!("EXCEPTION: STACK NOT PRESENT");
-    println!("Error Code: {:x}", error_code);
-    println!("{:#?}", stack_frame);
-
-    crate::hlt_loop();
+    emergency_console::with_console(|console| {
+        let _ = writeln!(console, "EXCEPTION: STACK NOT PRESENT");
+        let _ = writeln!(console, "Error Code: {:x}", error_code);
+        let _ = writeln!(console, "{:#?}", stack_frame);
+    });
 }
 
 extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
 ) -> ! {
-    panic!(
-        "EXCEPTION: DOUBLE FAULT\nError Code: {:x}\n{:#?}",
-        error_code, stack_frame
-    );
+    emergency_console::with_console(|console| {
+        let _ = writeln!(console, "EXCEPTION: DOUBLE FAULT",);
+        let _ = writeln!(console, "Error Code: {:x}", error_code);
+        let _ = writeln!(console, "{:#?}", stack_frame);
+    });
 }

@@ -91,18 +91,13 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
         let res = async {
             let window = Window::new(MOUSE_CURSOR_SIZE);
             {
-                let mut window = window.try_lock().ok_or(ErrorKind::Deadlock("window"))?;
+                let mut window = window.lock();
                 window.set_transparent_color(Some(TRANSPARENT_COLOR));
             }
 
             {
-                let drawer = window
-                    .try_lock()
-                    .ok_or(ErrorKind::Deadlock("window"))?
-                    .drawer();
-                let mut drawer = drawer
-                    .try_lock()
-                    .ok_or(ErrorKind::Deadlock("window drawer"))?;
+                let drawer = window.lock().drawer();
+                let mut drawer = drawer.lock();
                 draw(&mut *drawer);
             }
 

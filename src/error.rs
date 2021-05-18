@@ -52,7 +52,7 @@ pub(crate) enum ErrorKind {
     PhysicalMemoryNotMapped,
     UnsupportedPixelFormat(PixelFormat),
     ParameterTooLarge(&'static str, usize),
-    Deadlock(&'static str),
+    Deadlock,
     Full,
     NoEnoughMemory,
     XhcNotFound,

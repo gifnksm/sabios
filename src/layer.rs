@@ -3,7 +3,7 @@ use crate::{
     framebuffer,
     graphics::{Draw, Point, Vector2d},
     prelude::*,
-    sync::mpsc,
+    sync::{mpsc, mutex::Mutex},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
@@ -32,7 +32,7 @@ impl LayerId {
 pub(crate) struct Layer {
     id: LayerId,
     pos: Point<i32>,
-    window: Option<Arc<spin::Mutex<Window>>>,
+    window: Option<Arc<Mutex<Window>>>,
 }
 
 impl Layer {
@@ -48,11 +48,11 @@ impl Layer {
         self.id
     }
 
-    pub(crate) fn set_window(&mut self, window: Option<Arc<spin::Mutex<Window>>>) {
+    pub(crate) fn set_window(&mut self, window: Option<Arc<Mutex<Window>>>) {
         self.window = window;
     }
 
-    // fn window(&mut self) -> Option<Arc<spin::Mutex<Window>>> {
+    // fn window(&mut self) -> Option<Arc<Mutex<Window>>> {
     //     self.window.clone()
     // }
 
@@ -66,8 +66,7 @@ impl Layer {
 
     fn draw(&self, drawer: &mut dyn Draw) {
         if let Some(window) = self.window.as_ref() {
-            #[allow(clippy::unwrap_used)]
-            window.try_lock().unwrap().draw_to(drawer, self.pos)
+            window.lock().draw_to(drawer, self.pos)
         }
     }
 }

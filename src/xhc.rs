@@ -4,6 +4,7 @@ use crate::{
     memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
+    sync::mutex::Mutex,
     util,
 };
 use conquer_once::noblock::OnceCell;
@@ -17,7 +18,7 @@ use mikanos_usb as usb;
 use volatile::Volatile;
 use x86_64::structures::{idt::InterruptStackFrame, paging::OffsetPageTable};
 
-static XHC: OnceCell<spin::Mutex<&'static mut usb::xhci::Controller>> = OnceCell::uninit();
+static XHC: OnceCell<Mutex<&'static mut usb::xhci::Controller>> = OnceCell::uninit();
 
 pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<()> {
     let mut xhc_dev = None;
@@ -68,7 +69,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
 
     xhc.configure_connected_ports();
 
-    XHC.try_init_once(move || spin::Mutex::new(xhc))
+    XHC.try_init_once(move || Mutex::new(xhc))
         .convert_err("xhc::XHC")?;
 
     Ok(())
@@ -76,13 +77,13 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
 
 fn map_xhc_mmio(mapper: &mut OffsetPageTable, xhc_mmio_base: u64) -> Result<()> {
     // Map [xhc_mmio_base..(xhc_mmio_base+64kib)] as identity map
-    let mut allocator = memory::lock_memory_manager()?;
+    let mut allocator = memory::lock_memory_manager();
     paging::make_identity_mapping(mapper, &mut *allocator, xhc_mmio_base, 16)
 }
 
 fn alloc_memory_pool(mapper: &mut OffsetPageTable) -> Result<()> {
     let num_frames = 32;
-    let mut allocator = memory::lock_memory_manager()?;
+    let mut allocator = memory::lock_memory_manager();
     let frame_range = allocator.allocate(num_frames)?;
     let base_addr = frame_range.start.start_address().as_u64();
     paging::make_identity_mapping(mapper, &mut *allocator, base_addr, num_frames)?;

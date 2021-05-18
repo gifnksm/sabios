@@ -1,4 +1,7 @@
-use crate::graphics::{Color, Draw, Point, Rectangle, Size};
+use crate::{
+    graphics::{Color, Draw, Point, Rectangle, Size},
+    sync::mutex::Mutex,
+};
 use alloc::{
     sync::{Arc, Weak},
     vec,
@@ -10,27 +13,27 @@ use core::convert::TryFrom;
 pub(crate) struct Window {
     area: Rectangle<i32>,
     data: Vec<Vec<Color>>,
-    drawer: Arc<spin::Mutex<WindowDrawer>>,
+    drawer: Arc<Mutex<WindowDrawer>>,
     transparent_color: Option<Color>,
 }
 
 impl Window {
-    pub(crate) fn new(size: Size<i32>) -> Arc<spin::Mutex<Self>> {
+    pub(crate) fn new(size: Size<i32>) -> Arc<Mutex<Self>> {
         let area = Rectangle::new(Point::new(0, 0), size);
-        let window = Arc::new(spin::Mutex::new(Self {
+        let window = Arc::new(Mutex::new(Self {
             area,
             data: vec![vec![Color::BLACK; size.x as usize]; size.y as usize],
-            drawer: Arc::new(spin::Mutex::new(WindowDrawer {
+            drawer: Arc::new(Mutex::new(WindowDrawer {
                 area,
                 window: Weak::new(),
             })),
             transparent_color: None,
         }));
-        window.try_lock().unwrap().drawer.try_lock().unwrap().window = Arc::downgrade(&window);
+        window.lock().drawer.lock().window = Arc::downgrade(&window);
         window
     }
 
-    pub(crate) fn drawer(&self) -> Arc<spin::Mutex<WindowDrawer>> {
+    pub(crate) fn drawer(&self) -> Arc<Mutex<WindowDrawer>> {
         self.drawer.clone()
     }
 
@@ -81,7 +84,7 @@ impl Window {
 #[derive(Debug)]
 pub(crate) struct WindowDrawer {
     area: Rectangle<i32>,
-    window: Weak<spin::Mutex<Window>>,
+    window: Weak<Mutex<Window>>,
 }
 
 impl Draw for WindowDrawer {
@@ -91,8 +94,7 @@ impl Draw for WindowDrawer {
 
     fn draw(&mut self, p: Point<i32>, c: Color) {
         if let Some(window) = self.window.upgrade() {
-            #[allow(clippy::unwrap_used)]
-            window.try_lock().unwrap().set(p, c);
+            window.lock().set(p, c);
         }
     }
 }

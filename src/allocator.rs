@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{prelude::*, sync::mutex::Mutex};
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem,
@@ -12,7 +12,7 @@ use x86_64::{
 };
 
 #[global_allocator]
-static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
+static ALLOCATOR: Mutex<FixedSizeBlockAllocator> = Mutex::new(FixedSizeBlockAllocator::new());
 
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 64 * 512 * 4096; // 128MiB
@@ -47,23 +47,6 @@ pub(crate) fn init_heap(
 #[alloc_error_handler]
 fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     panic!("allocation error {:?}", layout)
-}
-
-/// A wrapper around `spin::Mutex` to permit trait implementations.
-pub struct Locked<A> {
-    inner: spin::Mutex<A>,
-}
-
-impl<A> Locked<A> {
-    pub const fn new(inner: A) -> Self {
-        Self {
-            inner: spin::Mutex::new(inner),
-        }
-    }
-
-    pub fn lock(&self) -> spin::MutexGuard<A> {
-        self.inner.lock()
-    }
 }
 
 struct ListNode {
@@ -121,7 +104,7 @@ impl FixedSizeBlockAllocator {
     }
 }
 
-unsafe impl GlobalAlloc for Locked<FixedSizeBlockAllocator> {
+unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let mut allocator = self.lock();
         match list_index(&layout) {

@@ -34,13 +34,8 @@ pub(crate) async fn handler_task() {
         let window = Window::new(screen_info.size());
 
         {
-            let drawer = window
-                .try_lock()
-                .ok_or(ErrorKind::Deadlock("window"))?
-                .drawer();
-            let mut drawer = drawer
-                .try_lock()
-                .ok_or(ErrorKind::Deadlock("window drawer"))?;
+            let drawer = window.lock().drawer();
+            let mut drawer = drawer.lock();
             draw(&mut *drawer, screen_info.size());
         }
 

@@ -3,7 +3,10 @@ use crate::{
     graphics::{Color, Draw, Point, Rectangle, Size},
     layer::{self, Layer, LayerEvent},
     prelude::*,
-    sync::mpsc,
+    sync::{
+        mpsc,
+        mutex::{Mutex, MutexGuard},
+    },
     window::{Window, WindowDrawer},
 };
 use alloc::sync::Arc;
@@ -27,7 +30,7 @@ pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write as _;
 
     interrupts::without_interrupts(|| {
-        if let Some(mut console) = CONSOLE.try_lock() {
+        if let Ok(mut console) = CONSOLE.try_lock() {
             let _ = console.with_writer(|mut writer| {
                 #[allow(clippy::unwrap_used)]
                 writer.write_fmt(args).unwrap();
@@ -39,7 +42,7 @@ pub fn _print(args: fmt::Arguments) {
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
-static CONSOLE: spin::Mutex<Console> = spin::Mutex::new(Console {
+static CONSOLE: Mutex<Console> = Mutex::new(Console {
     buffer: [[0; COLUMNS]; ROWS],
     fg_color: desktop::FG_COLOR,
     bg_color: desktop::BG_COLOR,
@@ -52,7 +55,7 @@ pub(crate) struct Console {
     fg_color: Color,
     bg_color: Color,
     cursor: Point<usize>,
-    window_drawer: Option<(Arc<spin::Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
+    window_drawer: Option<(Arc<Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
 }
 
 struct RedrawArea {
@@ -133,7 +136,7 @@ impl Console {
 
     fn set_window_drawer(
         &mut self,
-        drawer: Option<(Arc<spin::Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
+        drawer: Option<(Arc<Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
     ) -> Result<()> {
         self.window_drawer = drawer;
         self.refresh()?;
@@ -150,11 +153,7 @@ impl Console {
         assert!(!interrupts::are_enabled());
 
         if let Some((window_drawer, tx)) = self.window_drawer.clone() {
-            let drawer = Drawer::Window(
-                window_drawer
-                    .try_lock()
-                    .ok_or(ErrorKind::Deadlock("window_drawer"))?,
-            );
+            let drawer = Drawer::Window(window_drawer.lock());
             let writer = ConsoleWriter {
                 drawer,
                 console: self,
@@ -174,8 +173,8 @@ impl Console {
 }
 
 enum Drawer<'a> {
-    FrameBuffer(spin::MutexGuard<'static, framebuffer::Drawer>),
-    Window(spin::MutexGuard<'a, WindowDrawer>),
+    FrameBuffer(MutexGuard<'static, framebuffer::Drawer>),
+    Window(MutexGuard<'a, WindowDrawer>),
 }
 
 impl Draw for Drawer<'_> {
@@ -248,15 +247,9 @@ pub(crate) async fn handler_task() {
         let window = Window::new(window_size);
         let (tx, mut rx) = mpsc::channel(100);
         {
-            let drawer = window
-                .try_lock()
-                .ok_or(ErrorKind::Deadlock("window"))?
-                .drawer();
+            let drawer = window.lock().drawer();
             interrupts::without_interrupts(|| {
-                CONSOLE
-                    .try_lock()
-                    .ok_or(ErrorKind::Deadlock("console::CONSOLE"))?
-                    .set_window_drawer(Some((drawer, tx)))?;
+                CONSOLE.lock().set_window_drawer(Some((drawer, tx)))?;
                 Ok::<(), Error>(())
             })?;
         }

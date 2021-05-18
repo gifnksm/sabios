@@ -58,7 +58,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // Initialize memory mapping / frame allocator / heap
     let mut mapper = unsafe { paging::init(physical_memory_offset) };
     {
-        let mut allocator = memory::lock_memory_manager().expect("failed to lock memory manager");
+        let mut allocator = memory::lock_memory_manager();
 
         allocator
             .init(&*boot_info.memory_regions)

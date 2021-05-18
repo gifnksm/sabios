@@ -1,5 +1,7 @@
 use crate::{
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    framebuffer,
+    graphics::{Color, Draw, Point, Size},
+    shadow_buffer::ShadowBuffer,
     sync::mutex::Mutex,
 };
 use alloc::{
@@ -8,26 +10,29 @@ use alloc::{
     vec::Vec,
 };
 use core::convert::TryFrom;
+use custom_debug_derive::Debug as CustomDebug;
 
-#[derive(Debug)]
+#[derive(CustomDebug)]
 pub(crate) struct Window {
-    area: Rectangle<i32>,
+    size: Size<i32>,
     data: Vec<Vec<Color>>,
     drawer: Arc<Mutex<WindowDrawer>>,
     transparent_color: Option<Color>,
+    #[debug(skip)]
+    shadow_buffer: ShadowBuffer,
 }
 
 impl Window {
     pub(crate) fn new(size: Size<i32>) -> Arc<Mutex<Self>> {
-        let area = Rectangle::new(Point::new(0, 0), size);
         let window = Arc::new(Mutex::new(Self {
-            area,
+            size,
             data: vec![vec![Color::BLACK; size.x as usize]; size.y as usize],
             drawer: Arc::new(Mutex::new(WindowDrawer {
-                area,
+                size,
                 window: Weak::new(),
             })),
             transparent_color: None,
+            shadow_buffer: ShadowBuffer::new(size),
         }));
         window.lock().drawer.lock().window = Arc::downgrade(&window);
         window
@@ -59,11 +64,12 @@ impl Window {
             let y = usize::try_from(at.y).ok()?;
             let r = self.data.get_mut(y)?.get_mut(x)?;
             *r = c;
+            self.shadow_buffer.draw(at, c);
             Some(())
         });
     }
 
-    pub(crate) fn draw_to(&self, drawer: &mut dyn Draw, pos: Point<i32>) {
+    pub(crate) fn draw_to(&self, drawer: &mut framebuffer::Drawer, pos: Point<i32>) {
         match self.transparent_color {
             Some(tc) => {
                 for (c, wp) in self.colors() {
@@ -73,9 +79,10 @@ impl Window {
                 }
             }
             None => {
-                for (c, wp) in self.colors() {
-                    drawer.draw(pos + wp, c)
-                }
+                drawer.copy(pos, &self.shadow_buffer);
+                // for (c, wp) in self.colors() {
+                //     drawer.draw(pos + wp, c)
+                // }
             }
         }
     }
@@ -83,18 +90,19 @@ impl Window {
 
 #[derive(Debug)]
 pub(crate) struct WindowDrawer {
-    area: Rectangle<i32>,
+    size: Size<i32>,
     window: Weak<Mutex<Window>>,
 }
 
 impl Draw for WindowDrawer {
-    fn area(&self) -> Rectangle<i32> {
-        self.area
+    fn size(&self) -> Size<i32> {
+        self.size
     }
 
     fn draw(&mut self, p: Point<i32>, c: Color) {
         if let Some(window) = self.window.upgrade() {
-            window.lock().set(p, c);
+            let mut window = window.lock();
+            window.set(p, c);
         }
     }
 }

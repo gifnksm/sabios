@@ -1,6 +1,6 @@
 use crate::{
     framebuffer,
-    graphics::{Draw, Point, Vector2d},
+    graphics::{Point, Vector2d},
     prelude::*,
     sync::{mpsc, mutex::Mutex, once_cell::OnceCell},
     window::Window,
@@ -62,7 +62,7 @@ impl Layer {
         self.pos += diff;
     }
 
-    fn draw(&self, drawer: &mut dyn Draw) {
+    fn draw(&self, drawer: &mut framebuffer::Drawer) {
         if let Some(window) = self.window.as_ref() {
             window.lock().draw_to(drawer, self.pos)
         }
@@ -88,7 +88,7 @@ impl LayerManager {
         self.layers.insert(id, layer);
     }
 
-    fn draw(&self, drawer: &mut dyn Draw) {
+    fn draw(&self, drawer: &mut framebuffer::Drawer) {
         for id in &self.layer_stack {
             if let Some(layer) = self.layers.get(&id) {
                 layer.draw(drawer);

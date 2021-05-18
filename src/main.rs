@@ -39,6 +39,7 @@ mod mouse;
 mod paging;
 mod pci;
 mod prelude;
+mod shadow_buffer;
 mod sync;
 mod timer;
 mod window;

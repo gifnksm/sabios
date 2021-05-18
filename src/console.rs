@@ -178,10 +178,10 @@ enum Drawer<'a> {
 }
 
 impl Draw for Drawer<'_> {
-    fn area(&self) -> Rectangle<i32> {
+    fn size(&self) -> Size<i32> {
         match self {
-            Self::FrameBuffer(drawer) => drawer.area(),
-            Self::Window(drawer) => drawer.area(),
+            Self::FrameBuffer(drawer) => drawer.size(),
+            Self::Window(drawer) => drawer.size(),
         }
     }
 

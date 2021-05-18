@@ -2,6 +2,7 @@ use crate::{
     desktop,
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
+    shadow_buffer::ShadowBuffer,
     sync::{
         mutex::{Mutex, MutexGuard},
         once_cell::OnceCell,
@@ -57,6 +58,7 @@ pub(crate) struct ScreenInfo {
     pub(crate) height: i32,
     pub(crate) stride: i32,
     pub(crate) bytes_per_pixel: i32,
+    pub(crate) pixel_format: PixelFormat,
 }
 
 impl ScreenInfo {
@@ -70,6 +72,7 @@ impl ScreenInfo {
             height: usize_to_i32("vertical_resolution", info.vertical_resolution)?,
             stride: usize_to_i32("stride", info.stride)?,
             bytes_per_pixel: usize_to_i32("byte_per_pixel", info.bytes_per_pixel)?,
+            pixel_format: info.pixel_format,
         })
     }
 
@@ -89,11 +92,8 @@ pub(crate) struct Drawer {
 }
 
 impl Draw for Drawer {
-    fn area(&self) -> Rectangle<i32> {
-        Rectangle {
-            pos: Point::new(0, 0),
-            size: Point::new(self.info.width, self.info.height),
-        }
+    fn size(&self) -> Size<i32> {
+        Size::new(self.info.width, self.info.height)
     }
 
     fn draw(&mut self, p: Point<i32>, c: Color) {
@@ -105,6 +105,33 @@ impl Draw for Drawer {
 }
 
 impl Drawer {
+    pub(crate) fn copy(&mut self, pos: Point<i32>, src: &ShadowBuffer) {
+        let dst_size = self.size();
+        let src_size = src.size();
+
+        let copy_start_dst_x = i32::max(pos.x, 0);
+        let copy_start_dst_y = i32::max(pos.y, 0);
+        let copy_end_dst_x = i32::min(pos.x + src_size.x, dst_size.x);
+        let copy_end_dst_y = i32::min(pos.y + src_size.y, dst_size.y);
+
+        let stride = self.info.stride;
+        let bytes_per_pixel = self.info.bytes_per_pixel;
+        let bytes_per_copy_line = (bytes_per_pixel * (copy_end_dst_x - copy_start_dst_x)) as usize;
+
+        let dst_start_idx =
+            (bytes_per_pixel * (stride * copy_start_dst_y + copy_start_dst_x)) as usize;
+        let dst_buf = &mut self.framebuffer.buffer_mut()[dst_start_idx..];
+        let src_buf = src.data();
+
+        for dy in 0..(copy_end_dst_y - copy_start_dst_y) {
+            let dst =
+                &mut dst_buf[(bytes_per_pixel * dy * stride) as usize..][..bytes_per_copy_line];
+            let src =
+                &src_buf[(bytes_per_pixel * dy * src_size.x) as usize..][..bytes_per_copy_line];
+            dst.copy_from_slice(src);
+        }
+    }
+
     fn pixel_index(&self, p: Point<i32>) -> Option<usize> {
         if !self.area().contains(&p) {
             return None;
@@ -113,11 +140,11 @@ impl Drawer {
     }
 }
 
-trait PixelDraw {
+pub(crate) trait PixelDraw {
     fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color);
 }
 
-fn select_pixel_drawer(
+pub(crate) fn select_pixel_drawer(
     pixel_format: PixelFormat,
 ) -> Option<&'static (dyn PixelDraw + Send + Sync)> {
     match pixel_format {

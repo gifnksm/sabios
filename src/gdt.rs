@@ -1,4 +1,4 @@
-use crate::sync::once_cell::OnceCell;
+use crate::sync::OnceCell;
 use x86_64::{
     instructions::segmentation,
     structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},

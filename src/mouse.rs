@@ -2,7 +2,7 @@ use crate::{
     graphics::{Color, Draw, Point, Vector2d},
     layer::{self, Layer, LayerEvent},
     prelude::*,
-    sync::{mpsc, once_cell::OnceCell},
+    sync::{mpsc, OnceCell},
     window::Window,
 };
 use core::future::Future;

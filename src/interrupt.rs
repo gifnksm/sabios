@@ -1,4 +1,4 @@
-use crate::{emergency_console, println, sync::once_cell::OnceCell, xhc};
+use crate::{emergency_console, println, sync::OnceCell, xhc};
 use core::fmt::Write as _;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 

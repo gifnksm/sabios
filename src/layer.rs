@@ -2,7 +2,7 @@ use crate::{
     framebuffer,
     graphics::{Point, Vector2d},
     prelude::*,
-    sync::{mpsc, mutex::Mutex, once_cell::OnceCell},
+    sync::{mpsc, Mutex, OnceCell},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};

@@ -3,10 +3,7 @@ use crate::{
     graphics::{Color, Draw, Point, Rectangle, Size},
     layer::{self, Layer, LayerEvent},
     prelude::*,
-    sync::{
-        mpsc,
-        mutex::{Mutex, MutexGuard},
-    },
+    sync::{mpsc, Mutex, MutexGuard},
     window::{Window, WindowDrawer},
 };
 use alloc::sync::Arc;

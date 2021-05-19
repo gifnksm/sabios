@@ -1,6 +1,6 @@
 use crate::{
     prelude::*,
-    sync::mutex::{Mutex, MutexGuard},
+    sync::{Mutex, MutexGuard},
 };
 use bootloader::boot_info::{MemoryRegion, MemoryRegionKind};
 use core::cmp;

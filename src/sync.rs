@@ -1,3 +1,5 @@
+pub(crate) use self::{mutex::*, once_cell::*};
+
 pub(crate) mod mpsc;
-pub(crate) mod mutex;
-pub(crate) mod once_cell;
+mod mutex;
+mod once_cell;

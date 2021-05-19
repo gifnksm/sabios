@@ -2,7 +2,7 @@ use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Size},
     shadow_buffer::ShadowBuffer,
-    sync::mutex::Mutex,
+    sync::Mutex,
 };
 use alloc::{
     sync::{Arc, Weak},

@@ -3,7 +3,7 @@ use crate::{
     memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
-    sync::{mutex::Mutex, once_cell::OnceCell},
+    sync::{Mutex, OnceCell},
 };
 use core::{
     pin::Pin,

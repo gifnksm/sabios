@@ -1,4 +1,4 @@
-use crate::{prelude::*, sync::mutex::Mutex};
+use crate::{prelude::*, sync::Mutex};
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem,

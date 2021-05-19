@@ -1,4 +1,4 @@
-use crate::{interrupt::InterruptIndex, prelude::*,sync::mutex::{Mutex}};
+use crate::{interrupt::InterruptIndex, prelude::*, sync::Mutex};
 use arrayvec::ArrayVec;
 use bit_field::BitField;
 use core::{fmt, ops::Range};

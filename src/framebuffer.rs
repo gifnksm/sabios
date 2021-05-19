@@ -3,10 +3,7 @@ use crate::{
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
     shadow_buffer::ShadowBuffer,
-    sync::{
-        mutex::{Mutex, MutexGuard},
-        once_cell::OnceCell,
-    },
+    sync::{Mutex, MutexGuard, OnceCell},
 };
 use bootloader::boot_info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use core::convert::TryFrom;

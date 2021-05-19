@@ -37,7 +37,7 @@ impl fmt::Write for EmergencyConsole<'_> {
                 self.pos.x += font::FONT_PIXEL_SIZE.x;
             }
 
-            if ch == '\n' || self.pos.x + font::FONT_PIXEL_SIZE.x > self.screen_info.width {
+            if ch == '\n' || self.pos.x + font::FONT_PIXEL_SIZE.x > self.screen_info.size.x {
                 self.pos.y += font::FONT_PIXEL_SIZE.y;
                 self.pos.x = 0;
             }

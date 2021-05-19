@@ -31,12 +31,12 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
 pub(crate) async fn handler_task() {
     let res = async {
         let screen_info = *framebuffer::info();
-        let window = Window::new(screen_info.size());
+        let window = Window::new(screen_info.size);
 
         {
             let drawer = window.lock().drawer();
             let mut drawer = drawer.lock();
-            draw(&mut *drawer, screen_info.size());
+            draw(&mut *drawer, screen_info.size);
         }
 
         let mut layer = Layer::new();

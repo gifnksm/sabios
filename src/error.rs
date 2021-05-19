@@ -1,6 +1,6 @@
 use bootloader::boot_info::PixelFormat;
 use conquer_once::{TryGetError, TryInitError};
-use core::{fmt, panic::Location};
+use core::{fmt, num::TryFromIntError, panic::Location};
 use mikanos_usb::CxxError;
 use x86_64::structures::paging::{mapper::MapToError, page::AddressNotAligned, Size4KiB};
 
@@ -48,10 +48,10 @@ pub(crate) enum ErrorKind {
     MapTo(MapToError<Size4KiB>),
     TryInit(TryInitError),
     TryGet(TryGetError),
+    TryFromInt(TryFromIntError),
     FrameBufferNotSupported,
     PhysicalMemoryNotMapped,
     UnsupportedPixelFormat(PixelFormat),
-    ParameterTooLarge(&'static str, usize),
     Deadlock,
     Full,
     NoEnoughMemory,
@@ -85,7 +85,6 @@ impl fmt::Display for ErrorKind {
             ErrorKind::UnsupportedPixelFormat(pixel_format) => {
                 write!(f, "unsupported pixel format: {:?}", pixel_format)
             }
-            ErrorKind::ParameterTooLarge(name, value) => write!(f, "too large {}: {}", name, value),
             ErrorKind::Full => write!(f, "buffer full"),
             _ => write!(f, "{:?}", self),
         }
@@ -117,6 +116,13 @@ impl From<TryGetError> for Error {
     #[track_caller]
     fn from(err: TryGetError) -> Self {
         Error::from(ErrorKind::TryGet(err))
+    }
+}
+
+impl From<TryFromIntError> for Error {
+    #[track_caller]
+    fn from(err: TryFromIntError) -> Self {
+        Error::from(ErrorKind::TryFromInt(err))
     }
 }
 

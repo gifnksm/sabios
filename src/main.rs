@@ -21,6 +21,7 @@ use core::mem;
 use x86_64::VirtAddr;
 
 mod allocator;
+mod buffer_drawer;
 mod co_task;
 mod console;
 mod cxx_support;
@@ -39,7 +40,6 @@ mod mouse;
 mod paging;
 mod pci;
 mod prelude;
-mod shadow_buffer;
 mod sync;
 mod timer;
 mod window;

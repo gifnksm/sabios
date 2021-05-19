@@ -1,7 +1,8 @@
 use crate::{
+    buffer_drawer::ShadowBuffer,
     framebuffer,
     graphics::{Color, Draw, Point, Size},
-    shadow_buffer::ShadowBuffer,
+    prelude::*,
     sync::Mutex,
 };
 use alloc::{
@@ -24,6 +25,8 @@ pub(crate) struct Window {
 
 impl Window {
     pub(crate) fn new(size: Size<i32>) -> Arc<Mutex<Self>> {
+        let screen_info = *framebuffer::info();
+        #[allow(clippy::unwrap_used)]
         let window = Arc::new(Mutex::new(Self {
             size,
             data: vec![vec![Color::BLACK; size.x as usize]; size.y as usize],
@@ -32,7 +35,7 @@ impl Window {
                 window: Weak::new(),
             })),
             transparent_color: None,
-            shadow_buffer: ShadowBuffer::new(size),
+            shadow_buffer: ShadowBuffer::new_shadow(size, screen_info).unwrap(),
         }));
         window.lock().drawer.lock().window = Arc::downgrade(&window);
         window
@@ -78,12 +81,7 @@ impl Window {
                     }
                 }
             }
-            None => {
-                drawer.copy(pos, &self.shadow_buffer);
-                // for (c, wp) in self.colors() {
-                //     drawer.draw(pos + wp, c)
-                // }
-            }
+            None => drawer.copy(pos, &self.shadow_buffer),
         }
     }
 }

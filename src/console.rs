@@ -55,9 +55,11 @@ pub(crate) struct Console {
     window_drawer: Option<(Arc<Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
 }
 
+#[derive(Debug)]
 struct RedrawArea {
     area: Rectangle<usize>,
     fill_bg: bool,
+    scroll: usize,
 }
 
 impl RedrawArea {
@@ -68,6 +70,7 @@ impl RedrawArea {
                 size: Size::new(0, 0),
             },
             fill_bg: false,
+            scroll: 0,
         }
     }
 
@@ -78,6 +81,7 @@ impl RedrawArea {
                 size: Size::new(COLUMNS, ROWS),
             },
             fill_bg,
+            scroll: 0,
         }
     }
 
@@ -88,6 +92,15 @@ impl RedrawArea {
             return;
         }
         self.area = self.area.extend_to_contain(p);
+    }
+
+    fn scroll(&mut self) {
+        self.scroll += 1;
+        let mut start = self.area.pos;
+        start.y = start.y.saturating_sub(1);
+        let mut end = self.area.end_pos();
+        end.y = end.y.saturating_sub(1);
+        self.area = Rectangle::from_points(start, end);
     }
 }
 
@@ -122,13 +135,7 @@ impl Console {
             self.buffer[dst] = self.buffer[src];
         }
         self.buffer[ROWS - 1].fill(0b0);
-
-        // redraw whole console
-        redraw.fill_bg = true;
-        redraw.area = Rectangle {
-            pos: Point::new(0, 0),
-            size: Size::new(COLUMNS, ROWS),
-        };
+        redraw.scroll();
     }
 
     fn set_window_drawer(
@@ -174,19 +181,33 @@ enum Drawer<'a> {
     Window(MutexGuard<'a, WindowDrawer>),
 }
 
-impl Draw for Drawer<'_> {
-    fn size(&self) -> Size<i32> {
+impl<'a> Drawer<'a> {
+    fn with_drawer<T>(&self, f: impl FnOnce(&dyn Draw) -> T) -> T {
         match self {
-            Self::FrameBuffer(drawer) => drawer.size(),
-            Self::Window(drawer) => drawer.size(),
+            Self::FrameBuffer(drawer) => f(&**drawer),
+            Self::Window(drawer) => f(&**drawer),
         }
     }
 
-    fn draw(&mut self, p: Point<i32>, c: Color) {
+    fn with_drawer_mut<T>(&mut self, f: impl FnOnce(&mut dyn Draw) -> T) -> T {
         match self {
-            Self::FrameBuffer(drawer) => drawer.draw(p, c),
-            Self::Window(drawer) => drawer.draw(p, c),
+            Self::FrameBuffer(drawer) => f(&mut **drawer),
+            Self::Window(drawer) => f(&mut **drawer),
         }
+    }
+}
+
+impl Draw for Drawer<'_> {
+    fn size(&self) -> Size<i32> {
+        self.with_drawer(|d| d.size())
+    }
+
+    fn draw(&mut self, p: Point<i32>, c: Color) {
+        self.with_drawer_mut(|d| d.draw(p, c))
+    }
+
+    fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
+        self.with_drawer_mut(|d| d.move_area(offset, src))
     }
 }
 
@@ -213,6 +234,20 @@ impl<'d, 'c> ConsoleWriter<'d, 'c> {
     }
 
     fn redraw(&mut self, redraw: RedrawArea) {
+        if redraw.scroll > 0 {
+            let src = self.to_draw_rect(Rectangle {
+                pos: Point::new(0, 0),
+                size: Size::new(COLUMNS, ROWS),
+            });
+            let offset = -self.to_draw_point(Point::new(0, redraw.scroll));
+            self.drawer.move_area(offset, src);
+            let fill = self.to_draw_rect(Rectangle {
+                pos: Point::new(0, ROWS - redraw.scroll),
+                size: Size::new(COLUMNS, redraw.scroll),
+            });
+            self.drawer.fill_rect(fill, self.console.bg_color);
+        }
+
         if redraw.fill_bg {
             let rect = self.to_draw_rect(redraw.area);
             self.drawer.fill_rect(rect, self.console.bg_color);

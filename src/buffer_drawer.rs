@@ -1,11 +1,11 @@
 use crate::{
     framebuffer::ScreenInfo,
-    graphics::{Color, Draw, Point, Size},
+    graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
 };
 use alloc::{vec, vec::Vec};
 use bootloader::boot_info::{FrameBuffer, PixelFormat};
-use core::convert::TryFrom;
+use core::{cmp::Ordering, convert::TryFrom, ptr};
 
 pub(crate) type FrameBufferDrawer = BufferDrawer<FrameBuffer>;
 pub(crate) type ShadowBuffer = BufferDrawer<Vec<u8>>;
@@ -102,6 +102,62 @@ where
                 .pixel_draw(self.buffer.buffer_mut(), pixel_index, c)
         }
     }
+
+    fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
+        if offset.x == 0 && offset.y == 0 {
+            return;
+        }
+
+        let res = (|| {
+            let dst = (((src & self.area())? + offset) & self.area())?;
+            let src = dst - offset;
+            Some((dst, src))
+        })();
+        let (dst, src) = match res {
+            Some(res) => res,
+            None => return,
+        };
+
+        assert_eq!(dst.size, src.size);
+        let line_copy_bytes = (dst.size.x * self.bytes_per_pixel) as usize;
+
+        #[allow(clippy::unwrap_used)]
+        match i32::cmp(&dst.pos.y, &src.pos.y) {
+            Ordering::Less => {
+                // move up
+                for dy in 0..dst.size.y {
+                    let dp = Point::new(0, dy);
+                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
+                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
+                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                    unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
+                }
+            }
+            Ordering::Equal => {
+                // move left / move right
+                for dy in 0..dst.size.y {
+                    let dp = Point::new(0, dy);
+                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
+                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
+                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                    unsafe { ptr::copy(src_ptr, dst_ptr, line_copy_bytes) };
+                }
+            }
+            Ordering::Greater => {
+                // move down
+                for dy in (0..dst.size.y).rev() {
+                    let dp = Point::new(0, dy);
+                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
+                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
+                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                    unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
+                }
+            }
+        }
+    }
 }
 
 impl<B> BufferDrawer<B>
@@ -114,6 +170,13 @@ where
             bytes_per_pixel: self.bytes_per_pixel,
             pixel_format: self.pixel_format,
         }
+    }
+
+    pub(crate) fn color_at(&self, p: Point<i32>) -> Option<Color> {
+        self.pixel_index(p).map(|pixel_index| {
+            self.pixel_drawer
+                .color_at(self.buffer.buffer(), pixel_index)
+        })
     }
 
     pub(crate) fn copy<C>(&mut self, pos: Point<i32>, src: &BufferDrawer<C>)
@@ -158,6 +221,7 @@ where
 
 pub(crate) trait PixelDraw {
     fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color);
+    fn color_at(&self, buffer: &[u8], pixel_index: usize) -> Color;
 }
 
 fn select_pixel_drawer(
@@ -180,6 +244,14 @@ impl PixelDraw for RgbPixelDrawer {
         buffer[pixel_index + 1] = c.g;
         buffer[pixel_index + 2] = c.b;
     }
+
+    fn color_at(&self, buffer: &[u8], pixel_index: usize) -> Color {
+        Color::new(
+            buffer[pixel_index],
+            buffer[pixel_index + 1],
+            buffer[pixel_index + 2],
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -191,6 +263,14 @@ impl PixelDraw for BgrPixelDrawer {
         buffer[pixel_index + 1] = c.g;
         buffer[pixel_index + 2] = c.r;
     }
+
+    fn color_at(&self, buffer: &[u8], pixel_index: usize) -> Color {
+        Color::new(
+            buffer[pixel_index + 2],
+            buffer[pixel_index + 1],
+            buffer[pixel_index],
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -199,5 +279,9 @@ static U8_PIXEL_DRAWER: U8PixelDrawer = U8PixelDrawer;
 impl PixelDraw for U8PixelDrawer {
     fn pixel_draw(&self, buffer: &mut [u8], pixel_index: usize, c: Color) {
         buffer[pixel_index] = c.to_grayscale();
+    }
+
+    fn color_at(&self, buffer: &[u8], pixel_index: usize) -> Color {
+        Color::from_grayscale(buffer[pixel_index])
     }
 }

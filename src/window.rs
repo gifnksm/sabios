@@ -1,22 +1,16 @@
 use crate::{
     buffer_drawer::ShadowBuffer,
     framebuffer,
-    graphics::{Color, Draw, Point, Size},
+    graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
     sync::Mutex,
 };
-use alloc::{
-    sync::{Arc, Weak},
-    vec,
-    vec::Vec,
-};
-use core::convert::TryFrom;
+use alloc::sync::{Arc, Weak};
 use custom_debug_derive::Debug as CustomDebug;
 
 #[derive(CustomDebug)]
 pub(crate) struct Window {
     size: Size<i32>,
-    data: Vec<Vec<Color>>,
     drawer: Arc<Mutex<WindowDrawer>>,
     transparent_color: Option<Color>,
     #[debug(skip)]
@@ -29,7 +23,6 @@ impl Window {
         #[allow(clippy::unwrap_used)]
         let window = Arc::new(Mutex::new(Self {
             size,
-            data: vec![vec![Color::BLACK; size.x as usize]; size.y as usize],
             drawer: Arc::new(Mutex::new(WindowDrawer {
                 size,
                 window: Weak::new(),
@@ -50,26 +43,10 @@ impl Window {
     }
 
     fn colors(&'_ self) -> impl Iterator<Item = (Color, Point<i32>)> + '_ {
-        (0..)
-            .zip(&self.data)
-            .flat_map(|(y, row)| (0..).zip(row).map(move |(x, c)| (*c, Point::new(x, y))))
-    }
-
-    // fn get(&self, at: Point<i32>) -> Option<Color> {
-    //     let x = usize::try_from(at.x).ok()?;
-    //     let y = usize::try_from(at.y).ok()?;
-    //     Some(*self.data.get(y)?.get(x)?)
-    // }
-
-    fn set(&mut self, at: Point<i32>, c: Color) {
-        Some(()).and_then(|()| -> Option<()> {
-            let x = usize::try_from(at.x).ok()?;
-            let y = usize::try_from(at.y).ok()?;
-            let r = self.data.get_mut(y)?.get_mut(x)?;
-            *r = c;
-            self.shadow_buffer.draw(at, c);
-            Some(())
-        });
+        self.shadow_buffer
+            .area()
+            .points()
+            .filter_map(move |p| self.shadow_buffer.color_at(p).map(|c| (c, p)))
     }
 
     pub(crate) fn draw_to(&self, drawer: &mut framebuffer::Drawer, pos: Point<i32>) {
@@ -100,7 +77,14 @@ impl Draw for WindowDrawer {
     fn draw(&mut self, p: Point<i32>, c: Color) {
         if let Some(window) = self.window.upgrade() {
             let mut window = window.lock();
-            window.set(p, c);
+            window.shadow_buffer.draw(p, c);
+        }
+    }
+
+    fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
+        if let Some(window) = self.window.upgrade() {
+            let mut window = window.lock();
+            window.shadow_buffer.move_area(offset, src)
         }
     }
 }

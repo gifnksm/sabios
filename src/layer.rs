@@ -1,6 +1,7 @@
 use crate::{
+    buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
     framebuffer,
-    graphics::{Point, Rectangle},
+    graphics::{Draw, Offset, Point, Rectangle},
     prelude::*,
     sync::{mpsc, Mutex, MutexGuard, OnceCell},
     window::Window,
@@ -65,7 +66,10 @@ impl Layer {
         Some(Rectangle { pos, size })
     }
 
-    fn draw_to(&self, drawer: &mut framebuffer::Drawer, dst_area: Rectangle<i32>) {
+    fn draw_to<B>(&self, drawer: &mut BufferDrawer<B>, dst_area: Rectangle<i32>)
+    where
+        B: Buffer,
+    {
         if let Some(window) = self.window.as_ref() {
             window.lock().draw_to(drawer, self.pos, dst_area - self.pos)
         }
@@ -76,16 +80,19 @@ pub(crate) struct LayerManager {
     layers: BTreeMap<LayerId, Layer>,
     layer_stack: Vec<LayerId>,
     framebuffer: MutexGuard<'static, framebuffer::Drawer>,
+    back_buffer: ShadowBuffer,
 }
 
 impl LayerManager {
-    fn new() -> Self {
+    fn new() -> Result<Self> {
         let framebuffer = framebuffer::lock_drawer();
-        Self {
+        let back_buffer = ShadowBuffer::new_shadow(framebuffer.size(), framebuffer.info())?;
+        Ok(Self {
             layers: BTreeMap::new(),
             layer_stack: vec![],
             framebuffer,
-        }
+            back_buffer,
+        })
     }
 
     fn register(&mut self, layer: Layer) {
@@ -98,14 +105,16 @@ impl LayerManager {
         let Self {
             layers,
             layer_stack,
-            framebuffer,
+            back_buffer,
             ..
         } = self;
 
         let layers = layer_stack.iter().filter_map(|id| layers.get(id));
         for layer in layers {
-            layer.draw_to(&mut *framebuffer, dst_area);
+            layer.draw_to(back_buffer, dst_area);
         }
+
+        self.finish_draw(dst_area);
     }
 
     fn draw_layer(&mut self, layer_id: LayerId) {
@@ -114,7 +123,7 @@ impl LayerManager {
             let Self {
                 layers,
                 layer_stack,
-                framebuffer,
+                back_buffer,
                 ..
             } = self;
 
@@ -124,11 +133,18 @@ impl LayerManager {
                 .skip_while(|id| **id != layer_id)
                 .filter_map(|id| layers.get(id));
             for layer in layers {
-                layer.draw_to(&mut *framebuffer, dst_area);
+                layer.draw_to(back_buffer, dst_area);
             }
+
+            self.finish_draw(dst_area);
 
             Some(())
         })();
+    }
+
+    fn finish_draw(&mut self, area: Rectangle<i32>) {
+        self.framebuffer
+            .copy(Offset::new(0, 0), &self.back_buffer, area);
     }
 
     fn move_to(&mut self, id: LayerId, pos: Point<i32>) {
@@ -214,7 +230,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let mut layer_manager = LayerManager::new();
+            let mut layer_manager = LayerManager::new()?;
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),

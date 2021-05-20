@@ -1,5 +1,5 @@
 use crate::{
-    buffer_drawer::ShadowBuffer,
+    buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
     font, framebuffer,
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     prelude::*,
@@ -34,12 +34,14 @@ impl Window {
         self.transparent_color = tc;
     }
 
-    pub(crate) fn draw_to(
+    pub(crate) fn draw_to<B>(
         &self,
-        drawer: &mut framebuffer::Drawer,
+        drawer: &mut BufferDrawer<B>,
         src_dst_offset: Offset<i32>,
         src_area: Rectangle<i32>,
-    ) {
+    ) where
+        B: Buffer,
+    {
         (|| {
             let src_area = (src_area & self.shadow_buffer.area())?;
             if let Some(tc) = self.transparent_color {

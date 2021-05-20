@@ -1,6 +1,6 @@
 use crate::{
     framebuffer,
-    graphics::Point,
+    graphics::{Point, Rectangle},
     prelude::*,
     sync::{mpsc, Mutex, OnceCell},
     window::Window,
@@ -59,13 +59,15 @@ impl Layer {
         self.pos = pos;
     }
 
-    // pub(crate) fn move_relative(&mut self, diff: Vector2d<i32>) {
-    //     self.pos += diff;
-    // }
+    fn area(&self) -> Option<Rectangle<i32>> {
+        let pos = self.pos;
+        let size = self.window.as_ref()?.lock().size();
+        Some(Rectangle { pos, size })
+    }
 
-    fn draw(&self, drawer: &mut framebuffer::Drawer) {
+    fn draw_to(&self, drawer: &mut framebuffer::Drawer, dst_area: Rectangle<i32>) {
         if let Some(window) = self.window.as_ref() {
-            window.lock().draw_to(drawer, self.pos)
+            window.lock().draw_to(drawer, self.pos, dst_area - self.pos)
         }
     }
 }
@@ -89,25 +91,40 @@ impl LayerManager {
         self.layers.insert(id, layer);
     }
 
-    fn draw(&self, drawer: &mut framebuffer::Drawer) {
-        for id in &self.layer_stack {
-            if let Some(layer) = self.layers.get(&id) {
-                layer.draw(drawer);
+    fn draw_area(&self, drawer: &mut framebuffer::Drawer, dst_area: Rectangle<i32>) {
+        let layers = self.layer_stack.iter().filter_map(|id| self.layers.get(id));
+        for layer in layers {
+            layer.draw_to(drawer, dst_area);
+        }
+    }
+
+    fn draw_layer(&self, drawer: &mut framebuffer::Drawer, layer_id: LayerId) {
+        (|| {
+            let dst_area = self.layers.get(&layer_id).and_then(Layer::area)?;
+            let layers = self
+                .layer_stack
+                .iter()
+                .skip_while(|id| **id != layer_id)
+                .filter_map(|id| self.layers.get(id));
+            for layer in layers {
+                layer.draw_to(drawer, dst_area);
             }
-        }
+
+            Some(())
+        })();
     }
 
-    fn move_to(&mut self, id: LayerId, pos: Point<i32>) {
+    fn move_to(&mut self, drawer: &mut framebuffer::Drawer, id: LayerId, pos: Point<i32>) {
         if let Some(layer) = self.layers.get_mut(&id) {
+            let layer_id = layer.id();
+            let old_area = layer.area();
             layer.move_to(pos);
+            if let Some(old_area) = old_area {
+                self.draw_area(drawer, old_area);
+            }
+            self.draw_layer(drawer, layer_id);
         }
     }
-
-    // fn move_relative(&mut self, id: LayerId, diff: Vector2d<i32>) {
-    //     if let Some(layer) = self.layers.get_mut(&id) {
-    //         layer.move_relative(diff);
-    //     }
-    // }
 
     fn set_height(&mut self, id: LayerId, height: usize) {
         if !self.layers.contains_key(&id) {
@@ -124,14 +141,10 @@ impl LayerManager {
 }
 
 #[derive(Debug)]
-pub(crate) enum LayerEvent {
+enum LayerEvent {
     Register { layer: Layer },
-    Draw {},
+    DrawLayer { layer_id: LayerId },
     MoveTo { layer_id: LayerId, pos: Point<i32> },
-    // MoveRelative {
-    //     layer_id: LayerId,
-    //     diff: Vector2d<i32>,
-    // },
     SetHeight { layer_id: LayerId, height: usize },
     // Hide {
     //     layer_id: LayerId,
@@ -140,26 +153,33 @@ pub(crate) enum LayerEvent {
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();
 
-pub(crate) fn event_tx() -> mpsc::Sender<LayerEvent> {
-    LAYER_EVENT_TX.get().clone()
+pub(crate) fn event_tx() -> EventSender {
+    EventSender {
+        tx: LAYER_EVENT_TX.get().clone(),
+    }
 }
 
-impl mpsc::Sender<LayerEvent> {
+#[derive(Debug, Clone)]
+pub(crate) struct EventSender {
+    tx: mpsc::Sender<LayerEvent>,
+}
+
+impl EventSender {
+    fn send(&self, event: LayerEvent) -> Result<()> {
+        self.tx.send(event)
+    }
+
     pub(crate) fn register(&self, layer: Layer) -> Result<()> {
         self.send(LayerEvent::Register { layer })
     }
 
-    pub(crate) fn draw(&self) -> Result<()> {
-        self.send(LayerEvent::Draw {})
+    pub(crate) fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
+        self.send(LayerEvent::DrawLayer { layer_id })
     }
 
     pub(crate) fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
         self.send(LayerEvent::MoveTo { layer_id, pos })
     }
-
-    // pub(crate) fn move_relative(&self, layer_id: LayerId, diff: Vector2d<i32>) -> Result<()> {
-    //     self.send(LayerEvent::MoveRelative { layer_id, diff })
-    // }
 
     pub(crate) fn set_height(&self, layer_id: LayerId, height: usize) -> Result<()> {
         self.send(LayerEvent::SetHeight { layer_id, height })
@@ -181,14 +201,14 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),
-                    LayerEvent::Draw {} => {
+                    LayerEvent::DrawLayer { layer_id } => {
                         let mut framebuffer = framebuffer::lock_drawer();
-                        layer_manager.draw(&mut *framebuffer);
+                        layer_manager.draw_layer(&mut *framebuffer, layer_id);
                     }
-                    LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
-                    // LayerEvent::MoveRelative { layer_id, diff } => {
-                    //     layer_manager.move_relative(layer_id, diff)
-                    // }
+                    LayerEvent::MoveTo { layer_id, pos } => {
+                        let mut framebuffer = framebuffer::lock_drawer();
+                        layer_manager.move_to(&mut *framebuffer, layer_id, pos);
+                    }
                     LayerEvent::SetHeight { layer_id, height } => {
                         layer_manager.set_height(layer_id, height)
                     } // LayerEvent::Hide { layer_id } => layer_manager.hide(layer_id),

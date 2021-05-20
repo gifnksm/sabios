@@ -1,6 +1,6 @@
 use crate::{
     framebuffer::ScreenInfo,
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     prelude::*,
 };
 use alloc::{vec, vec::Vec};
@@ -108,55 +108,51 @@ where
             return;
         }
 
-        let res = (|| {
+        (|| {
             let dst = (((src & self.area())? + offset) & self.area())?;
             let src = dst - offset;
-            Some((dst, src))
+
+            assert_eq!(dst.size, src.size);
+            let line_copy_bytes = (dst.size.x * self.bytes_per_pixel) as usize;
+
+            match i32::cmp(&dst.pos.y, &src.pos.y) {
+                Ordering::Less => {
+                    // move up
+                    for dy in 0..dst.size.y {
+                        let dp = Point::new(0, dy);
+                        let dst_idx = self.pixel_index(dst.pos + dp)?;
+                        let src_idx = self.pixel_index(src.pos + dp)?;
+                        let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                        let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                        unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
+                    }
+                }
+                Ordering::Equal => {
+                    // move left / move right
+                    for dy in 0..dst.size.y {
+                        let dp = Point::new(0, dy);
+                        let dst_idx = self.pixel_index(dst.pos + dp)?;
+                        let src_idx = self.pixel_index(src.pos + dp)?;
+                        let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                        let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                        unsafe { ptr::copy(src_ptr, dst_ptr, line_copy_bytes) };
+                    }
+                }
+                Ordering::Greater => {
+                    // move down
+                    for dy in (0..dst.size.y).rev() {
+                        let dp = Point::new(0, dy);
+                        let dst_idx = self.pixel_index(dst.pos + dp)?;
+                        let src_idx = self.pixel_index(src.pos + dp)?;
+                        let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
+                        let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
+                        unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
+                    }
+                }
+            }
+
+            Some(())
         })();
-        let (dst, src) = match res {
-            Some(res) => res,
-            None => return,
-        };
-
-        assert_eq!(dst.size, src.size);
-        let line_copy_bytes = (dst.size.x * self.bytes_per_pixel) as usize;
-
-        #[allow(clippy::unwrap_used)]
-        match i32::cmp(&dst.pos.y, &src.pos.y) {
-            Ordering::Less => {
-                // move up
-                for dy in 0..dst.size.y {
-                    let dp = Point::new(0, dy);
-                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
-                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
-                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
-                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
-                    unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
-                }
-            }
-            Ordering::Equal => {
-                // move left / move right
-                for dy in 0..dst.size.y {
-                    let dp = Point::new(0, dy);
-                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
-                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
-                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
-                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
-                    unsafe { ptr::copy(src_ptr, dst_ptr, line_copy_bytes) };
-                }
-            }
-            Ordering::Greater => {
-                // move down
-                for dy in (0..dst.size.y).rev() {
-                    let dp = Point::new(0, dy);
-                    let dst_idx = self.pixel_index(dst.pos + dp).unwrap();
-                    let src_idx = self.pixel_index(src.pos + dp).unwrap();
-                    let dst_ptr = self.buffer.buffer_mut()[dst_idx..].as_mut_ptr();
-                    let src_ptr = self.buffer.buffer()[src_idx..].as_ptr();
-                    unsafe { ptr::copy_nonoverlapping(src_ptr, dst_ptr, line_copy_bytes) };
-                }
-            }
-        }
     }
 }
 
@@ -179,34 +175,42 @@ where
         })
     }
 
-    pub(crate) fn copy<C>(&mut self, pos: Point<i32>, src: &BufferDrawer<C>)
-    where
+    pub(crate) fn copy<C>(
+        &mut self,
+        src_dst_offset: Offset<i32>,
+        src: &BufferDrawer<C>,
+        src_area: Rectangle<i32>,
+    ) where
         C: Buffer,
     {
         assert_eq!(self.pixel_format, src.pixel_format);
+        assert_eq!(self.bytes_per_pixel, src.bytes_per_pixel);
 
-        let dst_size = self.size();
-        let src_size = src.size();
+        (|| {
+            // trim overflow area
+            let src_area = (src_area & src.area())?;
+            let dst_area = ((src_area + src_dst_offset) & self.area())?;
+            let src_area = dst_area - src_dst_offset;
+            assert_eq!(dst_area.size, src_area.size);
 
-        let copy_start_dst = Point::elem_max(pos, Point::new(0, 0));
-        let copy_end_dst = Point::elem_min(pos + src_size, dst_size);
+            let bytes_per_pixel = self.bytes_per_pixel;
+            let bytes_per_copy_line = (bytes_per_pixel * dst_area.size.x) as usize;
 
-        let stride = self.stride;
-        let bytes_per_pixel = self.bytes_per_pixel;
-        let bytes_per_copy_line = (bytes_per_pixel * (copy_end_dst.x - copy_start_dst.x)) as usize;
+            let dst_start_idx = self.pixel_index(dst_area.pos)?;
+            let src_start_idx = src.pixel_index(src_area.pos)?;
 
-        let dst_start_idx =
-            (bytes_per_pixel * (stride * copy_start_dst.y + copy_start_dst.x)) as usize;
-        let dst_buf = &mut self.buffer.buffer_mut()[dst_start_idx..];
-        let src_buf = src.buffer.buffer();
+            let dst_buf = &mut self.buffer.buffer_mut()[dst_start_idx..];
+            let src_buf = &src.buffer.buffer()[src_start_idx..];
 
-        for dy in 0..(copy_end_dst.y - copy_start_dst.y) {
-            let dst = &mut dst_buf[(bytes_per_pixel * dy * self.stride) as usize..]
-                [..bytes_per_copy_line];
-            let src =
-                &src_buf[(bytes_per_pixel * dy * src.stride) as usize..][..bytes_per_copy_line];
-            dst.copy_from_slice(src);
-        }
+            for dy in 0..dst_area.size.y {
+                let dst = &mut dst_buf[(bytes_per_pixel * dy * self.stride) as usize..]
+                    [..bytes_per_copy_line];
+                let src =
+                    &src_buf[(bytes_per_pixel * dy * src.stride) as usize..][..bytes_per_copy_line];
+                dst.copy_from_slice(src);
+            }
+            Some(())
+        })();
     }
 
     fn pixel_index(&self, p: Point<i32>) -> Option<usize> {

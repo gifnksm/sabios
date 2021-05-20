@@ -1,7 +1,7 @@
 use crate::{
     buffer_drawer::ShadowBuffer,
     font, framebuffer,
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     prelude::*,
     sync::Mutex,
 };
@@ -10,7 +10,6 @@ use custom_debug_derive::Debug as CustomDebug;
 
 #[derive(CustomDebug)]
 pub(crate) struct Window {
-    size: Size<i32>,
     drawer: Arc<Mutex<WindowDrawer>>,
     transparent_color: Option<Color>,
     #[debug(skip)]
@@ -22,7 +21,6 @@ impl Window {
         let screen_info = *framebuffer::info();
         #[allow(clippy::unwrap_used)]
         let window = Arc::new(Mutex::new(Self {
-            size,
             drawer: Arc::new(Mutex::new(WindowDrawer {
                 size,
                 window: Weak::new(),
@@ -34,6 +32,10 @@ impl Window {
         window
     }
 
+    pub(crate) fn size(&self) -> Size<i32> {
+        self.shadow_buffer.size()
+    }
+
     pub(crate) fn drawer(&self) -> Arc<Mutex<WindowDrawer>> {
         self.drawer.clone()
     }
@@ -42,24 +44,28 @@ impl Window {
         self.transparent_color = tc;
     }
 
-    fn colors(&'_ self) -> impl Iterator<Item = (Color, Point<i32>)> + '_ {
-        self.shadow_buffer
-            .area()
-            .points()
-            .filter_map(move |p| self.shadow_buffer.color_at(p).map(|c| (c, p)))
-    }
-
-    pub(crate) fn draw_to(&self, drawer: &mut framebuffer::Drawer, pos: Point<i32>) {
-        match self.transparent_color {
-            Some(tc) => {
-                for (c, wp) in self.colors() {
-                    if tc != c {
-                        drawer.draw(pos + wp, c);
+    pub(crate) fn draw_to(
+        &self,
+        drawer: &mut framebuffer::Drawer,
+        src_dst_offset: Offset<i32>,
+        src_area: Rectangle<i32>,
+    ) {
+        (|| {
+            let src_area = (src_area & self.shadow_buffer.area())?;
+            if let Some(tc) = self.transparent_color {
+                for p in src_area.points() {
+                    if let Some(c) = self.shadow_buffer.color_at(p) {
+                        if tc != c {
+                            drawer.draw(p + src_dst_offset, c);
+                        }
                     }
                 }
+            } else {
+                drawer.copy(src_dst_offset, &self.shadow_buffer, src_area);
             }
-            None => drawer.copy(pos, &self.shadow_buffer),
-        }
+
+            Some(())
+        })();
     }
 }
 

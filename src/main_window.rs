@@ -54,7 +54,7 @@ pub(crate) async fn handler_task() {
         let tx = layer::event_tx();
         tx.register(layer)?;
         tx.set_height(layer_id, layer::MAIN_WINDOW_ID)?;
-        tx.draw()?;
+        tx.draw_layer(layer_id)?;
 
         for count in 0.. {
             {
@@ -66,7 +66,7 @@ pub(crate) async fn handler_task() {
                 );
                 let s = format!("{:010}", count);
                 font::draw_str(&mut *drawer, Point::new(24, 28), &s, Color::BLACK);
-                tx.draw()?;
+                tx.draw_layer(layer_id)?;
             }
             Yield::new().await;
         }

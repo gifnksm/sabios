@@ -47,7 +47,7 @@ pub(crate) async fn handler_task() {
         let tx = layer::event_tx();
         tx.register(layer)?;
         tx.set_height(layer_id, layer::DESKTOP_HEIGHT)?;
-        tx.draw()?;
+        tx.draw_layer(layer_id)?;
 
         Ok::<(), Error>(())
     }

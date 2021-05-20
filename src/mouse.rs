@@ -1,6 +1,6 @@
 use crate::{
     framebuffer,
-    graphics::{Color, Draw, Point, Vector2d},
+    graphics::{Color, Draw, Offset, Point},
     layer::{self, Layer},
     prelude::*,
     sync::{mpsc, OnceCell},
@@ -44,14 +44,14 @@ const MOUSE_CURSOR_SHAPE: [[u8; MOUSE_CURSOR_WIDTH]; MOUSE_CURSOR_HEIGHT] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MouseEvent {
-    displacement: Vector2d<i32>,
+    displacement: Offset<i32>,
 }
 
 static MOUSE_EVENT_TX: OnceCell<mpsc::Sender<MouseEvent>> = OnceCell::uninit();
 
 pub(crate) extern "C" fn observer(displacement_x: i8, displacement_y: i8) {
     let event = MouseEvent {
-        displacement: Vector2d::new(i32::from(displacement_x), i32::from(displacement_y)),
+        displacement: Offset::new(i32::from(displacement_x), i32::from(displacement_y)),
     };
 
     let res = MOUSE_EVENT_TX.try_get().and_then(|tx| tx.send(event));
@@ -105,13 +105,12 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             let tx = layer::event_tx();
             tx.register(layer)?;
             tx.set_height(layer_id, layer::MOUSE_CURSOR_HEIGHT)?;
-            tx.draw()?;
+            tx.draw_layer(layer_id)?;
 
             while let Some(event) = rx.next().await {
                 if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
                     cursor_pos = pos;
                     tx.move_to(layer_id, pos)?;
-                    tx.draw()?;
                 }
             }
 

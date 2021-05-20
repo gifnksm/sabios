@@ -166,6 +166,7 @@ where
 
 pub(crate) type Point<T> = Vector2d<T>;
 pub(crate) type Size<T> = Vector2d<T>;
+pub(crate) type Offset<T> = Vector2d<T>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Rectangle<T> {

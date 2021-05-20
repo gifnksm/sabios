@@ -295,10 +295,10 @@ pub(crate) async fn handler_task() {
         let layer_tx = layer::event_tx();
         layer_tx.register(layer)?;
         layer_tx.set_height(layer_id, layer::CONSOLE_HEIGHT)?;
-        layer_tx.draw()?;
+        layer_tx.draw_layer(layer_id)?;
 
         while let Some(()) = rx.next().await {
-            layer_tx.draw()?;
+            layer_tx.draw_layer(layer_id)?;
         }
 
         Ok::<(), Error>(())

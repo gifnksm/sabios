@@ -26,6 +26,14 @@ impl Color {
         Color { r, g, b }
     }
 
+    pub(crate) const fn from_code(code: u32) -> Self {
+        Self {
+            r: ((code >> 16) & 0xff) as u8,
+            g: ((code >> 8) & 0xff) as u8,
+            b: (code & 0xff) as u8,
+        }
+    }
+
     pub(crate) const fn from_grayscale(v: u8) -> Self {
         Color::new(v, v, v)
     }

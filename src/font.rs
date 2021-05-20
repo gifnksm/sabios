@@ -55,16 +55,16 @@ where
     draw_byte(drawer, pos, byte, color)
 }
 
-// pub(crate) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
-// where
-//     D: Draw,
-// {
-//     let mut pos = pos;
-//     for ch in s.chars() {
-//         draw_char(drawer, pos, ch, color);
-//         pos.x += FONT_PIXEL_SIZE.x;
-//     }
-// }
+pub(crate) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
+where
+    D: Draw,
+{
+    let mut pos = pos;
+    for ch in s.chars() {
+        draw_char(drawer, pos, ch, color);
+        pos.x += FONT_PIXEL_SIZE.x;
+    }
+}
 
 // #[derive(Debug)]
 // pub(crate) struct StringDrawer<'d, D> {

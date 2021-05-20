@@ -35,6 +35,7 @@ mod graphics;
 mod interrupt;
 mod layer;
 mod log;
+mod main_window;
 mod memory;
 mod mouse;
 mod paging;
@@ -90,6 +91,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     executor.spawn(CoTask::new(mouse::handler_task()));
     executor.spawn(CoTask::new(desktop::handler_task()));
     executor.spawn(CoTask::new(console::handler_task()));
+    executor.spawn(CoTask::new(main_window::handler_task()));
     executor.spawn(CoTask::new(layer::handler_task()));
 
     x86_64::instructions::interrupts::enable();

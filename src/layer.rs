@@ -1,6 +1,6 @@
 use crate::{
     framebuffer,
-    graphics::{Point, Vector2d},
+    graphics::Point,
     prelude::*,
     sync::{mpsc, Mutex, OnceCell},
     window::Window,
@@ -14,7 +14,8 @@ use futures_util::StreamExt as _;
 
 pub(crate) const DESKTOP_HEIGHT: usize = 0;
 pub(crate) const CONSOLE_HEIGHT: usize = 1;
-pub(crate) const MOUSE_CURSOR_HEIGHT: usize = 2;
+pub(crate) const MAIN_WINDOW_ID: usize = 2;
+pub(crate) const MOUSE_CURSOR_HEIGHT: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LayerId(u32);

@@ -94,13 +94,14 @@ impl RedrawArea {
         self.area = self.area.extend_to_contain(p);
     }
 
+    #[allow(clippy::unwrap_used)]
     fn scroll(&mut self) {
         self.scroll += 1;
         let mut start = self.area.pos;
         start.y = start.y.saturating_sub(1);
         let mut end = self.area.end_pos();
         end.y = end.y.saturating_sub(1);
-        self.area = Rectangle::from_points(start, end);
+        self.area = Rectangle::from_points(start, end).unwrap();
     }
 }
 
@@ -297,10 +298,10 @@ pub(crate) async fn handler_task() {
             layer_id,
             height: layer::CONSOLE_HEIGHT,
         })?;
-        layer_tx.send(LayerEvent::Draw { bench: true })?;
+        layer_tx.send(LayerEvent::Draw {})?;
 
         while let Some(()) = rx.next().await {
-            layer_tx.send(LayerEvent::Draw { bench: true })?;
+            layer_tx.send(LayerEvent::Draw {})?;
         }
 
         Ok::<(), Error>(())

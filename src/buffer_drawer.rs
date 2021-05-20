@@ -188,21 +188,19 @@ where
         let dst_size = self.size();
         let src_size = src.size();
 
-        let copy_start_dst_x = i32::max(pos.x, 0);
-        let copy_start_dst_y = i32::max(pos.y, 0);
-        let copy_end_dst_x = i32::min(pos.x + src_size.x, dst_size.x);
-        let copy_end_dst_y = i32::min(pos.y + src_size.y, dst_size.y);
+        let copy_start_dst = Point::elem_max(pos, Point::new(0, 0));
+        let copy_end_dst = Point::elem_min(pos + src_size, dst_size);
 
         let stride = self.stride;
         let bytes_per_pixel = self.bytes_per_pixel;
-        let bytes_per_copy_line = (bytes_per_pixel * (copy_end_dst_x - copy_start_dst_x)) as usize;
+        let bytes_per_copy_line = (bytes_per_pixel * (copy_end_dst.x - copy_start_dst.x)) as usize;
 
         let dst_start_idx =
-            (bytes_per_pixel * (stride * copy_start_dst_y + copy_start_dst_x)) as usize;
+            (bytes_per_pixel * (stride * copy_start_dst.y + copy_start_dst.x)) as usize;
         let dst_buf = &mut self.buffer.buffer_mut()[dst_start_idx..];
         let src_buf = src.buffer.buffer();
 
-        for dy in 0..(copy_end_dst_y - copy_start_dst_y) {
+        for dy in 0..(copy_end_dst.y - copy_start_dst.y) {
             let dst = &mut dst_buf[(bytes_per_pixel * dy * self.stride) as usize..]
                 [..bytes_per_copy_line];
             let src =

@@ -54,6 +54,37 @@ impl<T> Vector2d<T> {
     }
 }
 
+impl<T> Vector2d<T>
+where
+    T: Copy + Ord,
+{
+    pub(crate) fn elem_min(self, other: Self) -> Self {
+        Self {
+            x: T::min(self.x, other.x),
+            y: T::min(self.y, other.y),
+        }
+    }
+
+    pub(crate) fn elem_max(self, other: Self) -> Self {
+        Self {
+            x: T::max(self.x, other.x),
+            y: T::max(self.y, other.y),
+        }
+    }
+}
+
+impl<T> Vector2d<T>
+where
+    T: Copy + Ord + Add<Output = T> + Sub<Output = T> + One,
+{
+    pub(crate) fn clamp(&self, rect: Rectangle<T>) -> Option<Self> {
+        Some(Self {
+            x: T::clamp(self.x, rect.x_start(), rect.x_max()?),
+            y: T::clamp(self.y, rect.y_start(), rect.y_max()?),
+        })
+    }
+}
+
 impl<T> fmt::Display for Vector2d<T>
 where
     T: fmt::Display,
@@ -144,14 +175,12 @@ impl<T> Rectangle<T>
 where
     T: Copy + Ord + Sub<Output = T>,
 {
-    pub(crate) fn from_points(p0: Point<T>, p1: Point<T>) -> Self {
-        let x_start = T::min(p0.x, p1.x);
-        let y_start = T::min(p0.y, p1.y);
-        let x_end = T::max(p0.x, p1.x);
-        let y_end = T::max(p0.y, p1.y);
-        let pos = Point::new(x_start, y_start);
-        let size = Size::new(x_end - x_start, y_end - y_start);
-        Rectangle { pos, size }
+    pub(crate) fn from_points(start: Point<T>, end: Point<T>) -> Option<Self> {
+        let size = Size::new(
+            (end.x > start.x).then(|| end.x - start.x)?,
+            (end.y > start.y).then(|| end.y - start.y)?,
+        );
+        Some(Rectangle { pos: start, size })
     }
 }
 
@@ -180,15 +209,9 @@ where
     type Output = Option<Self>;
 
     fn bitand(self, rhs: Rectangle<T>) -> Self::Output {
-        let x_start = T::max(self.x_start(), rhs.x_start());
-        let x_end = T::min(self.x_end(), rhs.x_end());
-        let y_start = T::max(self.y_start(), rhs.y_start());
-        let y_end = T::min(self.y_end(), rhs.y_end());
-        let x_size = (x_end > x_start).then(|| x_end - x_start)?;
-        let y_size = (y_end > y_start).then(|| y_end - y_start)?;
-        let pos = Point::new(x_start, y_start);
-        let size = Size::new(x_size, y_size);
-        Some(Rectangle { pos, size })
+        let start = Point::<T>::elem_max(self.pos, rhs.pos);
+        let end = Point::<T>::elem_min(self.end_pos(), rhs.end_pos());
+        Rectangle::from_points(start, end)
     }
 }
 
@@ -269,6 +292,19 @@ where
 
 impl<T> Rectangle<T>
 where
+    T: Copy + Ord + Add<Output = T> + Sub<Output = T> + One,
+{
+    pub(crate) fn x_max(&self) -> Option<T> {
+        (self.x_end() > T::one()).then(|| self.x_end() - T::one())
+    }
+
+    pub(crate) fn y_max(&self) -> Option<T> {
+        (self.y_end() > T::one()).then(|| self.y_end() - T::one())
+    }
+}
+
+impl<T> Rectangle<T>
+where
     T: Copy + Add<Output = T> + PartialOrd,
 {
     pub(crate) fn contains(&self, p: &Point<T>) -> bool {
@@ -283,8 +319,8 @@ where
     pub(crate) fn extend_to_contain(&self, p: Point<T>) -> Rectangle<T> {
         let x_start = T::min(p.x, self.x_start());
         let y_start = T::min(p.y, self.y_start());
-        let x_end = T::max(p.x + One::one(), self.x_end());
-        let y_end = T::max(p.y + One::one(), self.y_end());
+        let x_end = T::max(p.x + T::one(), self.x_end());
+        let y_end = T::max(p.y + T::one(), self.y_end());
         Rectangle {
             pos: Point::new(x_start, y_start),
             size: Size::new(x_end - x_start, y_end - y_start),

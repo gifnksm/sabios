@@ -1,4 +1,5 @@
 use crate::{
+    framebuffer,
     graphics::{Color, Draw, Point, Vector2d},
     layer::{self, Layer, LayerEvent},
     prelude::*,
@@ -93,10 +94,13 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 draw(&mut *drawer);
             }
 
+            let mut cursor_pos = Point::new(300, 200);
+            let screen_info = *framebuffer::info();
+
             let mut layer = Layer::new();
             let layer_id = layer.id();
             layer.set_window(Some(window));
-            layer.move_to(Point::new(300, 200));
+            layer.move_to(cursor_pos);
 
             let tx = layer::event_tx();
             tx.send(LayerEvent::Register { layer })?;
@@ -104,14 +108,14 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 layer_id,
                 height: layer::MOUSE_CURSOR_HEIGHT,
             })?;
-            tx.send(LayerEvent::Draw { bench: false })?;
+            tx.send(LayerEvent::Draw {})?;
 
             while let Some(event) = rx.next().await {
-                tx.send(LayerEvent::MoveRelative {
-                    layer_id,
-                    diff: event.displacement,
-                })?;
-                tx.send(LayerEvent::Draw { bench: false })?;
+                if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
+                    cursor_pos = pos;
+                    tx.send(LayerEvent::MoveTo { layer_id, pos })?;
+                    tx.send(LayerEvent::Draw {})?;
+                }
             }
 
             Ok::<(), Error>(())

@@ -96,11 +96,11 @@ impl LayerManager {
         }
     }
 
-    // fn move_to(&mut self, id: LayerId, pos: Point<i32>) {
-    //     if let Some(layer) = self.layers.get_mut(&id) {
-    //         layer.move_to(pos);
-    //     }
-    // }
+    fn move_to(&mut self, id: LayerId, pos: Point<i32>) {
+        if let Some(layer) = self.layers.get_mut(&id) {
+            layer.move_to(pos);
+        }
+    }
 
     fn move_relative(&mut self, id: LayerId, diff: Vector2d<i32>) {
         if let Some(layer) = self.layers.get_mut(&id) {
@@ -127,13 +127,11 @@ pub(crate) enum LayerEvent {
     Register {
         layer: Layer,
     },
-    Draw {
-        bench: bool,
+    Draw {},
+    MoveTo {
+        layer_id: LayerId,
+        pos: Point<i32>,
     },
-    // MoveTo {
-    //     layer_id: LayerId,
-    //     pos: Point<i32>,
-    // },
     MoveRelative {
         layer_id: LayerId,
         diff: Vector2d<i32>,
@@ -164,18 +162,11 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),
-                    LayerEvent::Draw { bench } => {
-                        use crate::timer::lapic;
+                    LayerEvent::Draw {} => {
                         let mut framebuffer = framebuffer::lock_drawer();
-                        lapic::start();
                         layer_manager.draw(&mut *framebuffer);
-                        let elapsed = lapic::elapsed();
-                        lapic::stop();
-                        if bench {
-                            crate::println!("{}", elapsed);
-                        }
                     }
-                    // LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
+                    LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
                     LayerEvent::MoveRelative { layer_id, diff } => {
                         layer_manager.move_relative(layer_id, diff)
                     }

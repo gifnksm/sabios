@@ -41,9 +41,8 @@ pub(crate) async fn handler_task() {
         let window = Window::new(Size::new(160, 52));
 
         {
-            let drawer = window.lock().drawer();
-            let mut drawer = drawer.lock();
-            window::draw_window(&mut *drawer, "Hello Window");
+            let mut window = window.lock();
+            window::draw_window(&mut *window, "Hello Window");
         }
 
         let mut layer = Layer::new();
@@ -58,14 +57,13 @@ pub(crate) async fn handler_task() {
 
         for count in 0.. {
             {
-                let drawer = window.lock().drawer();
-                let mut drawer = drawer.lock();
-                drawer.fill_rect(
+                let mut window = window.lock();
+                window.fill_rect(
                     Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
                     Color::from_code(0xc6c6c6),
                 );
                 let s = format!("{:010}", count);
-                font::draw_str(&mut *drawer, Point::new(24, 28), &s, Color::BLACK);
+                font::draw_str(&mut *window, Point::new(24, 28), &s, Color::BLACK);
                 tx.draw_layer(layer_id)?;
             }
             Yield::new().await;

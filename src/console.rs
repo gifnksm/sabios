@@ -4,7 +4,7 @@ use crate::{
     layer::{self, Layer},
     prelude::*,
     sync::{mpsc, Mutex, MutexGuard},
-    window::{Window, WindowDrawer},
+    window::Window,
 };
 use alloc::sync::Arc;
 use core::{convert::TryFrom, fmt};
@@ -44,7 +44,7 @@ static CONSOLE: Mutex<Console> = Mutex::new(Console {
     fg_color: desktop::FG_COLOR,
     bg_color: desktop::BG_COLOR,
     cursor: Point::new(0, 0),
-    window_drawer: None,
+    window: None,
 });
 
 pub(crate) struct Console {
@@ -52,7 +52,7 @@ pub(crate) struct Console {
     fg_color: Color,
     bg_color: Color,
     cursor: Point<usize>,
-    window_drawer: Option<(Arc<Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
+    window: Option<(Arc<Mutex<Window>>, mpsc::Sender<()>)>,
 }
 
 #[derive(Debug)]
@@ -139,11 +139,8 @@ impl Console {
         redraw.scroll();
     }
 
-    fn set_window_drawer(
-        &mut self,
-        drawer: Option<(Arc<Mutex<WindowDrawer>>, mpsc::Sender<()>)>,
-    ) -> Result<()> {
-        self.window_drawer = drawer;
+    fn set_window(&mut self, window: Option<(Arc<Mutex<Window>>, mpsc::Sender<()>)>) -> Result<()> {
+        self.window = window;
         self.refresh()?;
         Ok(())
     }
@@ -157,8 +154,8 @@ impl Console {
     fn with_writer(&'_ mut self, f: impl FnOnce(ConsoleWriter<'_, '_>)) -> Result<()> {
         assert!(!interrupts::are_enabled());
 
-        if let Some((window_drawer, tx)) = self.window_drawer.clone() {
-            let drawer = Drawer::Window(window_drawer.lock());
+        if let Some((window, tx)) = self.window.clone() {
+            let drawer = Drawer::Window(window.lock());
             let writer = ConsoleWriter {
                 drawer,
                 console: self,
@@ -179,7 +176,7 @@ impl Console {
 
 enum Drawer<'a> {
     FrameBuffer(MutexGuard<'static, framebuffer::Drawer>),
-    Window(MutexGuard<'a, WindowDrawer>),
+    Window(MutexGuard<'a, Window>),
 }
 
 impl<'a> Drawer<'a> {
@@ -280,9 +277,8 @@ pub(crate) async fn handler_task() {
         let window = Window::new(window_size);
         let (tx, mut rx) = mpsc::channel(100);
         {
-            let drawer = window.lock().drawer();
             interrupts::without_interrupts(|| {
-                CONSOLE.lock().set_window_drawer(Some((drawer, tx)))?;
+                CONSOLE.lock().set_window(Some((window.clone(), tx)))?;
                 Ok::<(), Error>(())
             })?;
         }

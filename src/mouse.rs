@@ -86,12 +86,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             {
                 let mut window = window.lock();
                 window.set_transparent_color(Some(TRANSPARENT_COLOR));
-            }
-
-            {
-                let drawer = window.lock().drawer();
-                let mut drawer = drawer.lock();
-                draw(&mut *drawer);
+                draw(&mut *window);
             }
 
             let mut cursor_pos = Point::new(300, 200);

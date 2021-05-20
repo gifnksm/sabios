@@ -5,12 +5,11 @@ use crate::{
     prelude::*,
     sync::Mutex,
 };
-use alloc::sync::{Arc, Weak};
+use alloc::sync::Arc;
 use custom_debug_derive::Debug as CustomDebug;
 
 #[derive(CustomDebug)]
 pub(crate) struct Window {
-    drawer: Arc<Mutex<WindowDrawer>>,
     transparent_color: Option<Color>,
     #[debug(skip)]
     shadow_buffer: ShadowBuffer,
@@ -21,23 +20,14 @@ impl Window {
         let screen_info = *framebuffer::info();
         #[allow(clippy::unwrap_used)]
         let window = Arc::new(Mutex::new(Self {
-            drawer: Arc::new(Mutex::new(WindowDrawer {
-                size,
-                window: Weak::new(),
-            })),
             transparent_color: None,
             shadow_buffer: ShadowBuffer::new_shadow(size, screen_info).unwrap(),
         }));
-        window.lock().drawer.lock().window = Arc::downgrade(&window);
         window
     }
 
     pub(crate) fn size(&self) -> Size<i32> {
         self.shadow_buffer.size()
-    }
-
-    pub(crate) fn drawer(&self) -> Arc<Mutex<WindowDrawer>> {
-        self.drawer.clone()
     }
 
     pub(crate) fn set_transparent_color(&mut self, tc: Option<Color>) {
@@ -69,29 +59,17 @@ impl Window {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct WindowDrawer {
-    size: Size<i32>,
-    window: Weak<Mutex<Window>>,
-}
-
-impl Draw for WindowDrawer {
+impl Draw for Window {
     fn size(&self) -> Size<i32> {
-        self.size
+        self.shadow_buffer.size()
     }
 
     fn draw(&mut self, p: Point<i32>, c: Color) {
-        if let Some(window) = self.window.upgrade() {
-            let mut window = window.lock();
-            window.shadow_buffer.draw(p, c);
-        }
+        self.shadow_buffer.draw(p, c);
     }
 
     fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
-        if let Some(window) = self.window.upgrade() {
-            let mut window = window.lock();
-            window.shadow_buffer.move_area(offset, src)
-        }
+        self.shadow_buffer.move_area(offset, src);
     }
 }
 

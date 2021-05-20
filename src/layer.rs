@@ -58,9 +58,9 @@ impl Layer {
         self.pos = pos;
     }
 
-    pub(crate) fn move_relative(&mut self, diff: Vector2d<i32>) {
-        self.pos += diff;
-    }
+    // pub(crate) fn move_relative(&mut self, diff: Vector2d<i32>) {
+    //     self.pos += diff;
+    // }
 
     fn draw(&self, drawer: &mut framebuffer::Drawer) {
         if let Some(window) = self.window.as_ref() {
@@ -102,11 +102,11 @@ impl LayerManager {
         }
     }
 
-    fn move_relative(&mut self, id: LayerId, diff: Vector2d<i32>) {
-        if let Some(layer) = self.layers.get_mut(&id) {
-            layer.move_relative(diff);
-        }
-    }
+    // fn move_relative(&mut self, id: LayerId, diff: Vector2d<i32>) {
+    //     if let Some(layer) = self.layers.get_mut(&id) {
+    //         layer.move_relative(diff);
+    //     }
+    // }
 
     fn set_height(&mut self, id: LayerId, height: usize) {
         if !self.layers.contains_key(&id) {
@@ -124,22 +124,14 @@ impl LayerManager {
 
 #[derive(Debug)]
 pub(crate) enum LayerEvent {
-    Register {
-        layer: Layer,
-    },
+    Register { layer: Layer },
     Draw {},
-    MoveTo {
-        layer_id: LayerId,
-        pos: Point<i32>,
-    },
-    MoveRelative {
-        layer_id: LayerId,
-        diff: Vector2d<i32>,
-    },
-    SetHeight {
-        layer_id: LayerId,
-        height: usize,
-    },
+    MoveTo { layer_id: LayerId, pos: Point<i32> },
+    // MoveRelative {
+    //     layer_id: LayerId,
+    //     diff: Vector2d<i32>,
+    // },
+    SetHeight { layer_id: LayerId, height: usize },
     // Hide {
     //     layer_id: LayerId,
     // },
@@ -149,6 +141,32 @@ static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();
 
 pub(crate) fn event_tx() -> mpsc::Sender<LayerEvent> {
     LAYER_EVENT_TX.get().clone()
+}
+
+impl mpsc::Sender<LayerEvent> {
+    pub(crate) fn register(&self, layer: Layer) -> Result<()> {
+        self.send(LayerEvent::Register { layer })
+    }
+
+    pub(crate) fn draw(&self) -> Result<()> {
+        self.send(LayerEvent::Draw {})
+    }
+
+    pub(crate) fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
+        self.send(LayerEvent::MoveTo { layer_id, pos })
+    }
+
+    // pub(crate) fn move_relative(&self, layer_id: LayerId, diff: Vector2d<i32>) -> Result<()> {
+    //     self.send(LayerEvent::MoveRelative { layer_id, diff })
+    // }
+
+    pub(crate) fn set_height(&self, layer_id: LayerId, height: usize) -> Result<()> {
+        self.send(LayerEvent::SetHeight { layer_id, height })
+    }
+
+    // pub(crate) fn hide(&self, layer_id: LayerId) -> Result<()> {
+    //     self.send(LayerEvent::Hide { layer_id })
+    // }
 }
 
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
@@ -167,9 +185,9 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                         layer_manager.draw(&mut *framebuffer);
                     }
                     LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
-                    LayerEvent::MoveRelative { layer_id, diff } => {
-                        layer_manager.move_relative(layer_id, diff)
-                    }
+                    // LayerEvent::MoveRelative { layer_id, diff } => {
+                    //     layer_manager.move_relative(layer_id, diff)
+                    // }
                     LayerEvent::SetHeight { layer_id, height } => {
                         layer_manager.set_height(layer_id, height)
                     } // LayerEvent::Hide { layer_id } => layer_manager.hide(layer_id),

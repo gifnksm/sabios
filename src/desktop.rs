@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, Layer, LayerEvent},
+    layer::{self, Layer},
     prelude::*,
     window::Window,
 };
@@ -45,12 +45,9 @@ pub(crate) async fn handler_task() {
         layer.move_to(Point::new(0, 0));
 
         let tx = layer::event_tx();
-        tx.send(LayerEvent::Register { layer })?;
-        tx.send(LayerEvent::SetHeight {
-            layer_id,
-            height: layer::DESKTOP_HEIGHT,
-        })?;
-        tx.send(LayerEvent::Draw {})?;
+        tx.register(layer)?;
+        tx.set_height(layer_id, layer::DESKTOP_HEIGHT)?;
+        tx.draw()?;
 
         Ok::<(), Error>(())
     }

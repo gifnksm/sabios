@@ -1,7 +1,7 @@
 use crate::{
     desktop, font, framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, Layer, LayerEvent},
+    layer::{self, Layer},
     prelude::*,
     sync::{mpsc, Mutex, MutexGuard},
     window::{Window, WindowDrawer},
@@ -293,15 +293,12 @@ pub(crate) async fn handler_task() {
         layer.move_to(Point::new(0, 0));
 
         let layer_tx = layer::event_tx();
-        layer_tx.send(LayerEvent::Register { layer })?;
-        layer_tx.send(LayerEvent::SetHeight {
-            layer_id,
-            height: layer::CONSOLE_HEIGHT,
-        })?;
-        layer_tx.send(LayerEvent::Draw {})?;
+        layer_tx.register(layer)?;
+        layer_tx.set_height(layer_id, layer::CONSOLE_HEIGHT)?;
+        layer_tx.draw()?;
 
         while let Some(()) = rx.next().await {
-            layer_tx.send(LayerEvent::Draw {})?;
+            layer_tx.draw()?;
         }
 
         Ok::<(), Error>(())

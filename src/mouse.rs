@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Vector2d},
-    layer::{self, Layer, LayerEvent},
+    layer::{self, Layer},
     prelude::*,
     sync::{mpsc, OnceCell},
     window::Window,
@@ -103,18 +103,15 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             layer.move_to(cursor_pos);
 
             let tx = layer::event_tx();
-            tx.send(LayerEvent::Register { layer })?;
-            tx.send(LayerEvent::SetHeight {
-                layer_id,
-                height: layer::MOUSE_CURSOR_HEIGHT,
-            })?;
-            tx.send(LayerEvent::Draw {})?;
+            tx.register(layer)?;
+            tx.set_height(layer_id, layer::MOUSE_CURSOR_HEIGHT)?;
+            tx.draw()?;
 
             while let Some(event) = rx.next().await {
                 if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
                     cursor_pos = pos;
-                    tx.send(LayerEvent::MoveTo { layer_id, pos })?;
-                    tx.send(LayerEvent::Draw {})?;
+                    tx.move_to(layer_id, pos)?;
+                    tx.draw()?;
                 }
             }
 

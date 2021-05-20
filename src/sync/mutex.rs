@@ -30,4 +30,9 @@ where
     pub(crate) unsafe fn force_unlock(&self) {
         unsafe { self.0.force_unlock() }
     }
+
+    #[track_caller]
+    pub(crate) fn with_lock<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        f(&mut *self.lock())
+    }
 }

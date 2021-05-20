@@ -40,10 +40,9 @@ pub(crate) async fn handler_task() {
     let res = async {
         let window = Window::new(Size::new(160, 52));
 
-        {
-            let mut window = window.lock();
-            window::draw_window(&mut *window, "Hello Window");
-        }
+        window.with_lock(|window| {
+            window::draw_window(window, "Hello Window");
+        });
 
         let mut layer = Layer::new();
         let layer_id = layer.id();
@@ -56,16 +55,16 @@ pub(crate) async fn handler_task() {
         tx.draw_layer(layer_id)?;
 
         for count in 0.. {
-            {
-                let mut window = window.lock();
+            window.with_lock(|window| {
                 window.fill_rect(
                     Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
                     Color::from_code(0xc6c6c6),
                 );
                 let s = format!("{:010}", count);
-                font::draw_str(&mut *window, Point::new(24, 28), &s, Color::BLACK);
-                tx.draw_layer(layer_id)?;
-            }
+                font::draw_str(window, Point::new(24, 28), &s, Color::BLACK);
+            });
+            tx.draw_layer(layer_id)?;
+
             Yield::new().await;
         }
 

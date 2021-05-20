@@ -83,11 +83,10 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     async move {
         let res = async {
             let window = Window::new(MOUSE_CURSOR_SIZE);
-            {
-                let mut window = window.lock();
+            window.with_lock(|window| {
                 window.set_transparent_color(Some(TRANSPARENT_COLOR));
-                draw(&mut *window);
-            }
+                draw(window);
+            });
 
             let mut cursor_pos = Point::new(300, 200);
             let screen_info = *framebuffer::info();

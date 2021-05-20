@@ -33,10 +33,9 @@ pub(crate) async fn handler_task() {
         let screen_info = *framebuffer::info();
         let window = Window::new(screen_info.size);
 
-        {
-            let mut window = window.lock();
-            draw(&mut *window, screen_info.size);
-        }
+        window.with_lock(|window| {
+            draw(window, screen_info.size);
+        });
 
         let mut layer = Layer::new();
         let layer_id = layer.id();

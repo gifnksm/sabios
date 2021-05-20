@@ -2,7 +2,7 @@ use crate::{
     framebuffer,
     graphics::{Point, Rectangle},
     prelude::*,
-    sync::{mpsc, Mutex, OnceCell},
+    sync::{mpsc, Mutex, MutexGuard, OnceCell},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
@@ -72,17 +72,19 @@ impl Layer {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct LayerManager {
     layers: BTreeMap<LayerId, Layer>,
     layer_stack: Vec<LayerId>,
+    framebuffer: MutexGuard<'static, framebuffer::Drawer>,
 }
 
 impl LayerManager {
     fn new() -> Self {
+        let framebuffer = framebuffer::lock_drawer();
         Self {
             layers: BTreeMap::new(),
             layer_stack: vec![],
+            framebuffer,
         }
     }
 
@@ -91,38 +93,53 @@ impl LayerManager {
         self.layers.insert(id, layer);
     }
 
-    fn draw_area(&self, drawer: &mut framebuffer::Drawer, dst_area: Rectangle<i32>) {
-        let layers = self.layer_stack.iter().filter_map(|id| self.layers.get(id));
+    fn draw_area(&mut self, dst_area: Rectangle<i32>) {
+        // destructure `self` to avoid borrow checker errors
+        let Self {
+            layers,
+            layer_stack,
+            framebuffer,
+            ..
+        } = self;
+
+        let layers = layer_stack.iter().filter_map(|id| layers.get(id));
         for layer in layers {
-            layer.draw_to(drawer, dst_area);
+            layer.draw_to(&mut *framebuffer, dst_area);
         }
     }
 
-    fn draw_layer(&self, drawer: &mut framebuffer::Drawer, layer_id: LayerId) {
+    fn draw_layer(&mut self, layer_id: LayerId) {
         (|| {
-            let dst_area = self.layers.get(&layer_id).and_then(Layer::area)?;
-            let layers = self
-                .layer_stack
+            // destructure `self` to avoid borrow checker errors
+            let Self {
+                layers,
+                layer_stack,
+                framebuffer,
+                ..
+            } = self;
+
+            let dst_area = layers.get(&layer_id).and_then(Layer::area)?;
+            let layers = layer_stack
                 .iter()
                 .skip_while(|id| **id != layer_id)
-                .filter_map(|id| self.layers.get(id));
+                .filter_map(|id| layers.get(id));
             for layer in layers {
-                layer.draw_to(drawer, dst_area);
+                layer.draw_to(&mut *framebuffer, dst_area);
             }
 
             Some(())
         })();
     }
 
-    fn move_to(&mut self, drawer: &mut framebuffer::Drawer, id: LayerId, pos: Point<i32>) {
+    fn move_to(&mut self, id: LayerId, pos: Point<i32>) {
         if let Some(layer) = self.layers.get_mut(&id) {
             let layer_id = layer.id();
             let old_area = layer.area();
             layer.move_to(pos);
             if let Some(old_area) = old_area {
-                self.draw_area(drawer, old_area);
+                self.draw_area(old_area);
             }
-            self.draw_layer(drawer, layer_id);
+            self.draw_layer(layer_id);
         }
     }
 
@@ -201,14 +218,8 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => layer_manager.register(layer),
-                    LayerEvent::DrawLayer { layer_id } => {
-                        let mut framebuffer = framebuffer::lock_drawer();
-                        layer_manager.draw_layer(&mut *framebuffer, layer_id);
-                    }
-                    LayerEvent::MoveTo { layer_id, pos } => {
-                        let mut framebuffer = framebuffer::lock_drawer();
-                        layer_manager.move_to(&mut *framebuffer, layer_id, pos);
-                    }
+                    LayerEvent::DrawLayer { layer_id } => layer_manager.draw_layer(layer_id),
+                    LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
                     LayerEvent::SetHeight { layer_id, height } => {
                         layer_manager.set_height(layer_id, height)
                     } // LayerEvent::Hide { layer_id } => layer_manager.hide(layer_id),

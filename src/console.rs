@@ -269,18 +269,28 @@ impl<'d, 'c> fmt::Write for ConsoleWriter<'d, 'c> {
     }
 }
 
-pub(crate) async fn handler_task() {
+pub(crate) struct ConsoleInitParam {
+    window: Arc<Mutex<Window>>,
+    rx: mpsc::Receiver<()>,
+}
+
+pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
+    let font_size = font::FONT_PIXEL_SIZE;
+    let window_size = Size::new(COLUMNS as i32 * font_size.x, ROWS as i32 * font_size.y);
+    let window = Window::new(window_size);
+    let (tx, rx) = mpsc::channel(100);
+    {
+        interrupts::without_interrupts(|| {
+            CONSOLE.lock().set_window(Some((window.clone(), tx)))?;
+            Ok::<(), Error>(())
+        })?;
+    }
+    Ok(ConsoleInitParam { window, rx })
+}
+
+pub(crate) async fn handler_task(param: ConsoleInitParam) {
     let res = async {
-        let font_size = font::FONT_PIXEL_SIZE;
-        let window_size = Size::new(COLUMNS as i32 * font_size.x, ROWS as i32 * font_size.y);
-        let window = Window::new(window_size);
-        let (tx, mut rx) = mpsc::channel(100);
-        {
-            interrupts::without_interrupts(|| {
-                CONSOLE.lock().set_window(Some((window.clone(), tx)))?;
-                Ok::<(), Error>(())
-            })?;
-        }
+        let ConsoleInitParam { window, mut rx } = param;
 
         let mut layer = Layer::new();
         let layer_id = layer.id();

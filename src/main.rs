@@ -85,12 +85,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // Initialize LAPIC timer
     timer::lapic::init();
 
+    let console_param = console::start_window_mode().expect("failed to start console window mode");
+
     // Initialize executor & co-tasks
     let mut executor = Executor::new();
     executor.spawn(CoTask::new(xhc::handler_task()));
     executor.spawn(CoTask::new(mouse::handler_task()));
     executor.spawn(CoTask::new(desktop::handler_task()));
-    executor.spawn(CoTask::new(console::handler_task()));
+    executor.spawn(CoTask::new(console::handler_task(console_param)));
     executor.spawn(CoTask::new(main_window::handler_task()));
     executor.spawn(CoTask::new(layer::handler_task()));
 

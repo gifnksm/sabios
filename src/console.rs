@@ -57,7 +57,7 @@ pub(crate) struct Console {
 
 #[derive(Debug)]
 struct RedrawArea {
-    area: Rectangle<usize>,
+    area: Option<Rectangle<usize>>,
     fill_bg: bool,
     scroll: usize,
 }
@@ -65,10 +65,7 @@ struct RedrawArea {
 impl RedrawArea {
     fn new() -> Self {
         Self {
-            area: Rectangle {
-                pos: Point::new(0, 0),
-                size: Size::new(0, 0),
-            },
+            area: None,
             fill_bg: false,
             scroll: 0,
         }
@@ -76,32 +73,32 @@ impl RedrawArea {
 
     fn all(fill_bg: bool) -> Self {
         Self {
-            area: Rectangle {
+            area: Some(Rectangle {
                 pos: Point::new(0, 0),
                 size: Size::new(COLUMNS, ROWS),
-            },
+            }),
             fill_bg,
             scroll: 0,
         }
     }
 
     fn add(&mut self, p: Point<usize>) {
-        if self.area.size.x == 0 || self.area.size.y == 0 {
-            self.area.pos = p;
-            self.area.size = Size::new(1, 1);
-            return;
+        match &mut self.area {
+            Some(area) => *area = area.extend_to_contain(p),
+            None => self.area = Some(Rectangle::new(p, Size::new(1, 1))),
         }
-        self.area = self.area.extend_to_contain(p);
     }
 
     #[allow(clippy::unwrap_used)]
     fn scroll(&mut self) {
         self.scroll += 1;
-        let mut start = self.area.pos;
-        start.y = start.y.saturating_sub(1);
-        let mut end = self.area.end_pos();
-        end.y = end.y.saturating_sub(1);
-        self.area = Rectangle::from_points(start, end).unwrap();
+        if let Some(area) = self.area {
+            let mut start = area.pos;
+            start.y = start.y.saturating_sub(1);
+            let mut end = area.end_pos();
+            end.y = end.y.saturating_sub(1);
+            self.area = Rectangle::from_points(start, end);
+        }
     }
 }
 
@@ -246,18 +243,20 @@ impl<'d, 'c> ConsoleWriter<'d, 'c> {
             self.drawer.fill_rect(fill, self.console.bg_color);
         }
 
-        if redraw.fill_bg {
-            let rect = self.to_draw_rect(redraw.area);
-            self.drawer.fill_rect(rect, self.console.bg_color);
-        }
+        if let Some(area) = redraw.area {
+            if redraw.fill_bg {
+                let rect = self.to_draw_rect(area);
+                self.drawer.fill_rect(rect, self.console.bg_color);
+            }
 
-        for console_y in redraw.area.y_range() {
-            let x_range = redraw.area.x_range();
-            let console_p = Point::new(redraw.area.x_start(), console_y);
+            for console_y in area.y_range() {
+                let x_range = area.x_range();
+                let console_p = Point::new(area.x_start(), console_y);
 
-            let bytes = &self.console.buffer[console_y][x_range];
-            let draw_p = self.to_draw_point(console_p);
-            font::draw_byte_str(&mut self.drawer, draw_p, bytes, self.console.fg_color);
+                let bytes = &self.console.buffer[console_y][x_range];
+                let draw_p = self.to_draw_point(console_p);
+                font::draw_byte_str(&mut self.drawer, draw_p, bytes, self.console.fg_color);
+            }
         }
     }
 }

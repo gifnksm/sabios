@@ -33,6 +33,7 @@ impl LayerId {
 pub(crate) struct Layer {
     id: LayerId,
     pos: Point<i32>,
+    draggable: bool,
     window: Option<Arc<Mutex<Window>>>,
 }
 
@@ -41,12 +42,17 @@ impl Layer {
         Self {
             id: LayerId::new(),
             pos: Point::new(0, 0),
+            draggable: false,
             window: None,
         }
     }
 
     pub(crate) fn id(&self) -> LayerId {
         self.id
+    }
+
+    pub(crate) fn set_draggable(&mut self, draggable: bool) {
+        self.draggable = draggable;
     }
 
     pub(crate) fn set_window(&mut self, window: Option<Arc<Mutex<Window>>>) {
@@ -309,6 +315,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                             drag_layer_id = lm
                                 .layers_by_pos(pos)
                                 .find(|layer| layer.id != cursor_layer_id)
+                                .filter(|layer| layer.draggable)
                                 .map(|layer| layer.id());
                         }
                     }

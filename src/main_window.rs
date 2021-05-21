@@ -46,6 +46,7 @@ pub(crate) async fn handler_task() {
 
         let mut layer = Layer::new();
         let layer_id = layer.id();
+        layer.set_draggable(true);
         layer.set_window(Some(window.clone()));
         layer.move_to(Point::new(300, 100));
 

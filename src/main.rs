@@ -97,6 +97,21 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     executor.spawn(CoTask::new(main_window::handler_task()));
     executor.spawn(CoTask::new(layer::handler_task()));
 
+    executor.spawn(CoTask::new(async {
+        #[allow(clippy::unwrap_used)]
+        let timeout = timer::lapic::register(600).unwrap();
+        println!("Timer interrupt, timeout = {}", timeout.await);
+    }));
+    executor.spawn(CoTask::new(async {
+        let mut timeout = 200;
+        for i in 0.. {
+            #[allow(clippy::unwrap_used)]
+            let timer = timer::lapic::register(timeout + 100).unwrap();
+            timeout = timer.await;
+            println!("Timer interrupt, timeout = {}, value = {}", timeout, i);
+        }
+    }));
+
     x86_64::instructions::interrupts::enable();
 
     // Start running

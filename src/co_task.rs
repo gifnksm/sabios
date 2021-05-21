@@ -26,11 +26,11 @@ impl CoTaskId {
 pub(crate) struct CoTask {
     id: CoTaskId,
     #[debug(skip)]
-    future: Pin<Box<dyn Future<Output = ()>>>,
+    future: Pin<Box<dyn Future<Output = ()> + Send>>,
 }
 
 impl CoTask {
-    pub(crate) fn new(future: impl Future<Output = ()> + 'static) -> Self {
+    pub(crate) fn new(future: impl Future<Output = ()> + Send + 'static) -> Self {
         Self {
             id: CoTaskId::new(),
             future: Box::pin(future),

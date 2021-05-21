@@ -51,7 +51,7 @@ entry_point!(kernel_main);
 
 #[allow(clippy::expect_used)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    log::set_level(log::Level::Debug);
+    log::set_level(log::Level::Info);
 
     let (framebuffer, physical_memory_offset, rsdp) =
         extract_boot_info(boot_info).expect("failed to extract boot_info");

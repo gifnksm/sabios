@@ -1,6 +1,6 @@
-use crate::{memory, paging, prelude::*};
+use crate::{memory, paging, prelude::*, sync::OnceCell};
 use core::{mem, slice};
-use x86_64::{structures::paging::OffsetPageTable, VirtAddr};
+use x86_64::{instructions::port::PortReadOnly, structures::paging::OffsetPageTable, VirtAddr};
 
 /// Root System Description Pointer
 #[derive(Debug)]
@@ -105,6 +105,8 @@ struct Fadt {
     reserved3: [u8; 276 - 116],
 }
 
+static FADT: OnceCell<&Fadt> = OnceCell::uninit();
+
 /// # Safety
 ///
 /// This function is unsafe because the caller must guarantee that the
@@ -119,7 +121,7 @@ unsafe fn sum_bytes<T>(data: &T, bytes: usize) -> u8 {
 ///
 /// This function is unsafe because the caller must guarantee that the
 /// complete RSDP is mapped to virtual memory at the passed `rsdp`.
-pub(crate) unsafe fn init(mapper: &mut OffsetPageTable, rsdp: VirtAddr) -> Result<&'static Rsdp> {
+pub(crate) unsafe fn init(mapper: &mut OffsetPageTable, rsdp: VirtAddr) -> Result<()> {
     debug!("RSDP: {:x}", rsdp.as_u64());
     map_page(mapper, rsdp)?;
 
@@ -153,7 +155,28 @@ pub(crate) unsafe fn init(mapper: &mut OffsetPageTable, rsdp: VirtAddr) -> Resul
         .and_then(|entry| unsafe { (entry as *const DescriptionHeader as *const Fadt).as_ref() })
         .ok_or(ErrorKind::FadtNotFound)?;
 
-    Ok(rsdp)
+    FADT.init_once(|| fadt);
+
+    Ok(())
+}
+
+pub(crate) const PM_TIMER_FREQ: u32 = 3579545;
+
+pub(crate) fn wait_milliseconds(msec: u32) {
+    let fadt = FADT.get();
+    let pm_timer_32 = ((fadt.flags >> 8) & 1) != 0;
+
+    let mut port = PortReadOnly::<u32>::new(fadt.pm_tmr_blk as u16);
+    let start = unsafe { port.read() };
+    let mut end = start + PM_TIMER_FREQ * msec;
+    if !pm_timer_32 {
+        end &= 0x00ffffff;
+    }
+
+    if end < start {
+        while unsafe { port.read() } >= start {}
+    }
+    while unsafe { port.read() } < end {}
 }
 
 fn map_page(mapper: &mut OffsetPageTable, addr: VirtAddr) -> Result<()> {

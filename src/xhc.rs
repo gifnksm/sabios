@@ -1,5 +1,5 @@
 use crate::{
-    interrupt::InterruptIndex,
+    interrupt::{self, InterruptIndex},
     memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
@@ -12,7 +12,6 @@ use core::{
 };
 use futures_util::{task::AtomicWaker, Stream, StreamExt as _};
 use mikanos_usb as usb;
-use volatile::Volatile;
 use x86_64::structures::{idt::InterruptStackFrame, paging::OffsetPageTable};
 
 static XHC: OnceCell<Mutex<&'static mut usb::xhci::Controller>> = OnceCell::uninit();
@@ -142,13 +141,7 @@ impl Stream for InterruptStream {
 pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
     INTERRUPTED_FLAG.store(true, Ordering::Relaxed);
     WAKER.wake();
-    notify_end_of_interrupt();
-}
-
-fn notify_end_of_interrupt() {
-    #[allow(clippy::unwrap_used)]
-    let mut memory = Volatile::new(unsafe { (0xfee000b0 as *mut u32).as_mut().unwrap() });
-    memory.write(0);
+    interrupt::notify_end_of_interrupt();
 }
 
 pub(crate) async fn handler_task() {

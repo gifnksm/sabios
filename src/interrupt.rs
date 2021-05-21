@@ -1,11 +1,13 @@
-use crate::{emergency_console, println, sync::OnceCell, xhc};
+use crate::{emergency_console, println, sync::OnceCell, timer, xhc};
 use core::fmt::Write as _;
+use volatile::Volatile;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub(crate) enum InterruptIndex {
     Xhci = 0x40,
+    Timer = 0x41,
 }
 
 impl InterruptIndex {
@@ -35,6 +37,7 @@ pub(crate) fn init() {
             .set_handler_fn(segment_not_present_handler);
         idt.double_fault.set_handler_fn(double_fault_handler);
         idt[InterruptIndex::Xhci.as_usize()].set_handler_fn(xhc::interrupt_handler);
+        idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer::lapic::interrupt_handler);
         idt
     });
     IDT.get().load();
@@ -90,4 +93,10 @@ extern "x86-interrupt" fn double_fault_handler(
         let _ = writeln!(console, "Error Code: {:x}", error_code);
         let _ = writeln!(console, "{:#?}", stack_frame);
     });
+}
+
+pub(crate) fn notify_end_of_interrupt() {
+    #[allow(clippy::unwrap_used)]
+    let mut memory = Volatile::new(unsafe { (0xfee000b0 as *mut u32).as_mut().unwrap() });
+    memory.write(0);
 }

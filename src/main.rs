@@ -90,6 +90,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // Initialize executor & co-tasks
     let mut executor = Executor::new();
     executor.spawn(CoTask::new(xhc::handler_task()));
+    executor.spawn(CoTask::new(timer::lapic::handler_task()));
     executor.spawn(CoTask::new(mouse::handler_task()));
     executor.spawn(CoTask::new(desktop::handler_task()));
     executor.spawn(CoTask::new(console::handler_task(console_param)));

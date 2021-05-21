@@ -48,7 +48,7 @@ extern "C" void cxx_xhci_hid_mouse_driver_set_default_observer(MouseObserverType
   usb::HIDMouseDriver::default_observer = observer;
 }
 
-extern "C" typedef void (*KeyboardObserverType)(uint8_t keycode);
+extern "C" typedef void (*KeyboardObserverType)(uint8_t modifier, uint8_t keycode);
 
 extern "C" void cxx_xhci_hid_keyboard_driver_set_default_observer(KeyboardObserverType observer) {
   usb::HIDKeyboardDriver::default_observer = observer;

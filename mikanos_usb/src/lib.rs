@@ -4,7 +4,7 @@
 #![no_std]
 
 type MouseObserverType = extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8);
-type KeyboardObserverType = extern "C" fn(keycode: u8);
+type KeyboardObserverType = extern "C" fn(modifier: u8, keycode: u8);
 
 extern "C" {
     fn cxx_xhci_controller_new(xhc_mmio_base: u64) -> *mut xhci::Controller;
@@ -69,7 +69,7 @@ impl HidMouseDriver {
 // opaque type
 pub enum HidKeyboardDriver {}
 
-pub type HidKeyboardObserver = extern "C" fn(keycode: u8);
+pub type HidKeyboardObserver = extern "C" fn(modifier: u8, keycode: u8);
 
 impl HidKeyboardDriver {
     pub fn set_default_observer(observer: HidKeyboardObserver) {

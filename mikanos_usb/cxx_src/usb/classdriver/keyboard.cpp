@@ -16,10 +16,10 @@ Error HIDKeyboardDriver::OnDataReceived() {
       continue;
     }
     const auto &prev_buf = PreviousBuffer();
-    if (std::find(prev_buf.begin(), prev_buf.end(), key) != prev_buf.end()) {
+    if (std::find(prev_buf.begin() + 2, prev_buf.end(), key) != prev_buf.end()) {
       continue;
     }
-    NotifyKeyPush(key);
+    NotifyKeyPush(Buffer()[0], key);
   }
   return MAKE_ERROR(Error::kSuccess);
 }
@@ -30,15 +30,15 @@ void *HIDKeyboardDriver::operator new(size_t size) {
 
 void HIDKeyboardDriver::operator delete(void *ptr) noexcept { FreeMem(ptr); }
 
-void HIDKeyboardDriver::SubscribeKeyPush(std::function<void(uint8_t keycode)> observer) {
+void HIDKeyboardDriver::SubscribeKeyPush(std::function<ObserverType> observer) {
   observers_[num_observers_++] = observer;
 }
 
 std::function<HIDKeyboardDriver::ObserverType> HIDKeyboardDriver::default_observer;
 
-void HIDKeyboardDriver::NotifyKeyPush(uint8_t keycode) {
+void HIDKeyboardDriver::NotifyKeyPush(uint8_t modifier, uint8_t keycode) {
   for (int i = 0; i < num_observers_; ++i) {
-    observers_[i](keycode);
+    observers_[i](modifier, keycode);
   }
 }
 } // namespace usb

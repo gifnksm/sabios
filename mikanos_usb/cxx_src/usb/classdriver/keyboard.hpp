@@ -20,7 +20,7 @@ public:
 
   Error OnDataReceived() override;
 
-  using ObserverType = void(uint8_t keycode);
+  using ObserverType = void(uint8_t modifier, uint8_t keycode);
   void SubscribeKeyPush(std::function<ObserverType> observer);
   static std::function<ObserverType> default_observer;
 
@@ -28,6 +28,6 @@ private:
   std::array<std::function<ObserverType>, 4> observers_;
   int num_observers_ = 0;
 
-  void NotifyKeyPush(uint8_t keycode);
+  void NotifyKeyPush(uint8_t modifier, uint8_t keycode);
 };
 } // namespace usb

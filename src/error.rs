@@ -53,6 +53,8 @@ pub(crate) enum ErrorKind {
     PhysicalMemoryNotMapped,
     RsdpNotMapped,
     InvalidRsdp,
+    InvalidXsdt,
+    FadtNotFound,
     UnsupportedPixelFormat(PixelFormat),
     Deadlock,
     Full,

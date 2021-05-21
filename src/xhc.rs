@@ -1,6 +1,6 @@
 use crate::{
     interrupt::{self, InterruptIndex},
-    memory, mouse, paging,
+    keyboard, memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
     sync::{Mutex, OnceCell},
@@ -62,6 +62,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
     xhc.run()?;
 
     usb::HidMouseDriver::set_default_observer(mouse::observer);
+    usb::HidKeyboardDriver::set_default_observer(keyboard::observer);
 
     xhc.configure_connected_ports();
 

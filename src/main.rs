@@ -34,6 +34,7 @@ mod framebuffer;
 mod gdt;
 mod graphics;
 mod interrupt;
+mod keyboard;
 mod layer;
 mod log;
 mod main_window;
@@ -94,6 +95,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     executor.spawn(CoTask::new(xhc::handler_task()));
     executor.spawn(CoTask::new(timer::lapic::handler_task()));
     executor.spawn(CoTask::new(mouse::handler_task()));
+    executor.spawn(CoTask::new(keyboard::handler_task()));
     executor.spawn(CoTask::new(desktop::handler_task()));
     executor.spawn(CoTask::new(console::handler_task(console_param)));
     executor.spawn(CoTask::new(main_window::handler_task()));

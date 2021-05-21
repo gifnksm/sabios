@@ -1,4 +1,5 @@
 #include "logger.hpp"
+#include "usb/classdriver/keyboard.hpp"
 #include "usb/classdriver/mouse.hpp"
 #include "usb/memory.hpp"
 #include "usb/xhci/xhci.hpp"
@@ -40,11 +41,17 @@ extern "C" bool cxx_xhci_controller_has_event(usb::xhci::Controller *xhc) {
   return xhc->PrimaryEventRing()->HasFront();
 }
 
-extern "C" typedef void (*ObserverType)(uint8_t buttons, int8_t displacement_x,
-                                        int8_t displacement_y);
+extern "C" typedef void (*MouseObserverType)(uint8_t buttons, int8_t displacement_x,
+                                             int8_t displacement_y);
 
-extern "C" void cxx_xhci_hid_mouse_driver_set_default_observer(ObserverType observer) {
+extern "C" void cxx_xhci_hid_mouse_driver_set_default_observer(MouseObserverType observer) {
   usb::HIDMouseDriver::default_observer = observer;
+}
+
+extern "C" typedef void (*KeyboardObserverType)(uint8_t keycode);
+
+extern "C" void cxx_xhci_hid_keyboard_driver_set_default_observer(KeyboardObserverType observer) {
+  usb::HIDKeyboardDriver::default_observer = observer;
 }
 
 extern "C" void cxx_set_memory_pool(uintptr_t pool_ptr, size_t pool_size) {

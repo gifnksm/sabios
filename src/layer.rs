@@ -3,7 +3,7 @@ use crate::{
     framebuffer,
     graphics::{Draw, Offset, Point, Rectangle},
     prelude::*,
-    sync::{mpsc, Mutex, MutexGuard, OnceCell},
+    sync::{mpsc, oneshot, Mutex, MutexGuard, OnceCell},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
@@ -159,6 +159,18 @@ impl LayerManager {
         }
     }
 
+    fn move_relative(&mut self, id: LayerId, offset: Offset<i32>) {
+        if let Some(layer) = self.layers.get_mut(&id) {
+            let layer_id = layer.id();
+            let old_area = layer.area();
+            layer.move_to(layer.pos + offset);
+            if let Some(old_area) = old_area {
+                self.draw_area(old_area);
+            }
+            self.draw_layer(layer_id)
+        }
+    }
+
     fn set_height(&mut self, id: LayerId, height: usize) {
         if !self.layers.contains_key(&id) {
             return;
@@ -171,17 +183,47 @@ impl LayerManager {
     // fn hide(&mut self, id: LayerId) {
     //     self.layer_stack.retain(|elem| *elem != id);
     // }
+
+    fn find_layer_by_pos(&self, pos: Point<i32>, exclude_layer_id: LayerId) -> Option<LayerId> {
+        self.layer_stack.iter().rev().copied().find(|layer_id| {
+            *layer_id != exclude_layer_id
+                && self
+                    .layers
+                    .get(&layer_id)
+                    .and_then(|layer| layer.area().map(|area| area.contains(&pos)))
+                    .unwrap_or(false)
+        })
+    }
 }
 
 #[derive(Debug)]
 enum LayerEvent {
-    Register { layer: Layer },
-    DrawLayer { layer_id: LayerId },
-    MoveTo { layer_id: LayerId, pos: Point<i32> },
-    SetHeight { layer_id: LayerId, height: usize },
+    Register {
+        layer: Layer,
+    },
+    DrawLayer {
+        layer_id: LayerId,
+    },
+    MoveTo {
+        layer_id: LayerId,
+        pos: Point<i32>,
+    },
+    MoveRelative {
+        layer_id: LayerId,
+        offset: Offset<i32>,
+    },
+    SetHeight {
+        layer_id: LayerId,
+        height: usize,
+    },
     // Hide {
     //     layer_id: LayerId,
     // },
+    FindLayerByPos {
+        pos: Point<i32>,
+        exclude_layer_id: LayerId,
+        tx: oneshot::Sender<Option<LayerId>>,
+    },
 }
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();
@@ -214,6 +256,10 @@ impl EventSender {
         self.send(LayerEvent::MoveTo { layer_id, pos })
     }
 
+    pub(crate) fn move_relative(&self, layer_id: LayerId, offset: Offset<i32>) -> Result<()> {
+        self.send(LayerEvent::MoveRelative { layer_id, offset })
+    }
+
     pub(crate) fn set_height(&self, layer_id: LayerId, height: usize) -> Result<()> {
         self.send(LayerEvent::SetHeight { layer_id, height })
     }
@@ -221,6 +267,20 @@ impl EventSender {
     // pub(crate) fn hide(&self, layer_id: LayerId) -> Result<()> {
     //     self.send(LayerEvent::Hide { layer_id })
     // }
+
+    pub(crate) async fn find_layer_by_pos(
+        &self,
+        pos: Point<i32>,
+        exclude_layer_id: LayerId,
+    ) -> Result<Option<LayerId>> {
+        let (tx, rx) = oneshot::channel();
+        self.send(LayerEvent::FindLayerByPos {
+            pos,
+            exclude_layer_id,
+            tx,
+        })?;
+        Ok(rx.await)
+    }
 }
 
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
@@ -230,15 +290,22 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let mut layer_manager = LayerManager::new()?;
+            let mut lm = LayerManager::new()?;
             while let Some(event) = rx.next().await {
                 match event {
-                    LayerEvent::Register { layer } => layer_manager.register(layer),
-                    LayerEvent::DrawLayer { layer_id } => layer_manager.draw_layer(layer_id),
-                    LayerEvent::MoveTo { layer_id, pos } => layer_manager.move_to(layer_id, pos),
-                    LayerEvent::SetHeight { layer_id, height } => {
-                        layer_manager.set_height(layer_id, height)
-                    } // LayerEvent::Hide { layer_id } => layer_manager.hide(layer_id),
+                    LayerEvent::Register { layer } => lm.register(layer),
+                    LayerEvent::DrawLayer { layer_id } => lm.draw_layer(layer_id),
+                    LayerEvent::MoveTo { layer_id, pos } => lm.move_to(layer_id, pos),
+                    LayerEvent::MoveRelative { layer_id, offset } => {
+                        lm.move_relative(layer_id, offset)
+                    }
+                    LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
+                    // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
+                    LayerEvent::FindLayerByPos {
+                        pos,
+                        exclude_layer_id,
+                        tx,
+                    } => tx.send(lm.find_layer_by_pos(pos, exclude_layer_id)),
                 }
             }
 

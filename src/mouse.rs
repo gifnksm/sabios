@@ -7,6 +7,7 @@ use crate::{
     window::Window,
 };
 use core::future::Future;
+use enumflags2::{bitflags, BitFlags};
 use futures_util::StreamExt as _;
 
 const TRANSPARENT_COLOR: Color = Color::RED;
@@ -42,15 +43,27 @@ const MOUSE_CURSOR_SHAPE: [[u8; MOUSE_CURSOR_WIDTH]; MOUSE_CURSOR_HEIGHT] = [
     *b"         @@@   ",
 ];
 
+#[bitflags]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MouseButton {
+    Left = 0b001,
+    Right = 0b010,
+    Middle = 0b100,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct MouseEvent {
+    buttons: BitFlags<MouseButton>,
     displacement: Offset<i32>,
 }
 
 static MOUSE_EVENT_TX: OnceCell<mpsc::Sender<MouseEvent>> = OnceCell::uninit();
 
-pub(crate) extern "C" fn observer(displacement_x: i8, displacement_y: i8) {
+pub(crate) extern "C" fn observer(buttons: u8, displacement_x: i8, displacement_y: i8) {
+    let buttons = BitFlags::<MouseButton>::from_bits_truncate(buttons);
     let event = MouseEvent {
+        buttons,
         displacement: Offset::new(i32::from(displacement_x), i32::from(displacement_y)),
     };
 
@@ -101,10 +114,32 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             tx.set_height(layer_id, layer::MOUSE_CURSOR_HEIGHT)?;
             tx.draw_layer(layer_id)?;
 
+            let mut buttons = BitFlags::empty();
+            let mut drag_layer_id = None;
             while let Some(event) = rx.next().await {
+                let prev_cursor_pos = cursor_pos;
+                let prev_buttons = buttons;
+
                 if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
                     cursor_pos = pos;
-                    tx.move_to(layer_id, pos)?;
+                }
+                buttons = event.buttons;
+
+                let pressed = buttons & !prev_buttons;
+                let released = prev_buttons & !buttons;
+                let pos_diff = cursor_pos - prev_cursor_pos;
+
+                if prev_cursor_pos != cursor_pos {
+                    tx.move_to(layer_id, cursor_pos)?;
+                }
+                if released.contains(MouseButton::Left) {
+                    drag_layer_id = None;
+                }
+                if let Some(layer_id) = drag_layer_id {
+                    tx.move_relative(layer_id, pos_diff)?;
+                }
+                if pressed.contains(MouseButton::Left) {
+                    drag_layer_id = tx.find_layer_by_pos(cursor_pos, layer_id).await?;
                 }
             }
 

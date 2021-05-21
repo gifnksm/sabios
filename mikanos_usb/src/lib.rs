@@ -3,7 +3,7 @@
 #![warn(clippy::expect_used)]
 #![no_std]
 
-type ObserverType = extern "C" fn(displacement_x: i8, displacement_y: i8);
+type ObserverType = extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8);
 
 extern "C" {
     fn cxx_xhci_controller_new(xhc_mmio_base: u64) -> *mut xhci::Controller;
@@ -56,7 +56,7 @@ pub mod xhci {
 // opaque type
 pub enum HidMouseDriver {}
 
-pub type HidMouseObserver = extern "C" fn(displacement_x: i8, displacement_y: i8);
+pub type HidMouseObserver = extern "C" fn(buttons: u8, displacement_x: i8, displacement_y: i8);
 
 impl HidMouseDriver {
     pub fn set_default_observer(observer: HidMouseObserver) {

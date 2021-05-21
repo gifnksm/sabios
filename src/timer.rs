@@ -30,7 +30,7 @@ pub(crate) mod lapic {
     pub(crate) fn init() {
         divide_config().write(0b1011); // divide 1:1
         lvt_timer().write((0b010 << 16) | (InterruptIndex::Timer as u32)); // not-masked, periodic
-        initial_count().write(COUNT_MAX);
+        initial_count().write(0x1000000);
     }
 
     pub(crate) fn start() {
@@ -43,6 +43,25 @@ pub(crate) mod lapic {
 
     pub(crate) fn stop() {
         initial_count().write(0);
+    }
+
+    #[derive(Debug)]
+    struct TimerManager {
+        tick: u64,
+    }
+
+    impl TimerManager {
+        fn new() -> Self {
+            Self { tick: 0 }
+        }
+
+        fn current_tick(&self) -> u64 {
+            self.tick
+        }
+
+        fn tick(&mut self, count: u64) {
+            self.tick = self.tick.wrapping_add(count);
+        }
     }
 
     static INTERRUPTED_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -88,9 +107,11 @@ pub(crate) mod lapic {
 
     pub(crate) async fn handler_task() {
         let res = async {
+            let mut timer_manager = TimerManager::new();
             let mut interrupts = InterruptStream::new();
             while let Some(count) = interrupts.next().await {
-                crate::println!("Timer interrupt: {}", count);
+                timer_manager.tick(count);
+                crate::println!("Timer interrupt: {}", timer_manager.current_tick());
             }
             Ok::<(), Error>(())
         }

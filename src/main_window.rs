@@ -6,35 +6,6 @@ use crate::{
     window::{self, Window},
 };
 use alloc::format;
-use core::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
-
-struct Yield {
-    yielded: bool,
-}
-
-impl Yield {
-    fn new() -> Self {
-        Self { yielded: false }
-    }
-}
-
-impl Future for Yield {
-    type Output = ();
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.yielded {
-            cx.waker().wake_by_ref();
-            self.yielded = true;
-            Poll::Pending
-        } else {
-            Poll::Ready(())
-        }
-    }
-}
 
 pub(crate) async fn handler_task() {
     let res = async {
@@ -55,7 +26,7 @@ pub(crate) async fn handler_task() {
         tx.set_height(layer_id, layer::MAIN_WINDOW_ID)?;
         tx.draw_layer(layer_id)?;
 
-        for count in 0.. {
+        for count in 0..1 {
             window.with_lock(|window| {
                 window.fill_rect(
                     Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
@@ -65,8 +36,6 @@ pub(crate) async fn handler_task() {
                 font::draw_str(window, Point::new(24, 28), &s, Color::BLACK);
             });
             tx.draw_layer(layer_id)?;
-
-            Yield::new().await;
         }
 
         Ok::<(), Error>(())

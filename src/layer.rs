@@ -2,8 +2,9 @@ use crate::{
     buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
     framebuffer,
     graphics::{Draw, Offset, Point, Rectangle},
+    mouse::{MouseButton, MouseEvent},
     prelude::*,
-    sync::{mpsc, oneshot, Mutex, MutexGuard, OnceCell},
+    sync::{mpsc, Mutex, MutexGuard, OnceCell},
     window::Window,
 };
 use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
@@ -184,15 +185,19 @@ impl LayerManager {
     //     self.layer_stack.retain(|elem| *elem != id);
     // }
 
-    fn find_layer_by_pos(&self, pos: Point<i32>, exclude_layer_id: LayerId) -> Option<LayerId> {
-        self.layer_stack.iter().rev().copied().find(|layer_id| {
-            *layer_id != exclude_layer_id
-                && self
-                    .layers
-                    .get(&layer_id)
-                    .and_then(|layer| layer.area().map(|area| area.contains(&pos)))
-                    .unwrap_or(false)
-        })
+    fn layers_by_pos(&self, pos: Point<i32>) -> impl Iterator<Item = &Layer> {
+        self.layer_stack
+            .iter()
+            .rev()
+            .copied()
+            .filter_map(move |layer_id| {
+                self.layers.get(&layer_id).filter(|layer| {
+                    layer
+                        .area()
+                        .map(|area| area.contains(&pos))
+                        .unwrap_or(false)
+                })
+            })
     }
 }
 
@@ -208,10 +213,6 @@ enum LayerEvent {
         layer_id: LayerId,
         pos: Point<i32>,
     },
-    MoveRelative {
-        layer_id: LayerId,
-        offset: Offset<i32>,
-    },
     SetHeight {
         layer_id: LayerId,
         height: usize,
@@ -219,10 +220,9 @@ enum LayerEvent {
     // Hide {
     //     layer_id: LayerId,
     // },
-    FindLayerByPos {
-        pos: Point<i32>,
-        exclude_layer_id: LayerId,
-        tx: oneshot::Sender<Option<LayerId>>,
+    MouseEvent {
+        cursor_layer_id: LayerId,
+        event: MouseEvent,
     },
 }
 
@@ -256,10 +256,6 @@ impl EventSender {
         self.send(LayerEvent::MoveTo { layer_id, pos })
     }
 
-    pub(crate) fn move_relative(&self, layer_id: LayerId, offset: Offset<i32>) -> Result<()> {
-        self.send(LayerEvent::MoveRelative { layer_id, offset })
-    }
-
     pub(crate) fn set_height(&self, layer_id: LayerId, height: usize) -> Result<()> {
         self.send(LayerEvent::SetHeight { layer_id, height })
     }
@@ -268,18 +264,11 @@ impl EventSender {
     //     self.send(LayerEvent::Hide { layer_id })
     // }
 
-    pub(crate) async fn find_layer_by_pos(
-        &self,
-        pos: Point<i32>,
-        exclude_layer_id: LayerId,
-    ) -> Result<Option<LayerId>> {
-        let (tx, rx) = oneshot::channel();
-        self.send(LayerEvent::FindLayerByPos {
-            pos,
-            exclude_layer_id,
-            tx,
-        })?;
-        Ok(rx.await)
+    pub(crate) fn mouse_event(&self, cursor_layer_id: LayerId, event: MouseEvent) -> Result<()> {
+        self.send(LayerEvent::MouseEvent {
+            cursor_layer_id,
+            event,
+        })
     }
 }
 
@@ -291,21 +280,38 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     async move {
         let res = async {
             let mut lm = LayerManager::new()?;
+
+            let mut drag_layer_id = None;
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => lm.register(layer),
                     LayerEvent::DrawLayer { layer_id } => lm.draw_layer(layer_id),
                     LayerEvent::MoveTo { layer_id, pos } => lm.move_to(layer_id, pos),
-                    LayerEvent::MoveRelative { layer_id, offset } => {
-                        lm.move_relative(layer_id, offset)
-                    }
                     LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
                     // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
-                    LayerEvent::FindLayerByPos {
-                        pos,
-                        exclude_layer_id,
-                        tx,
-                    } => tx.send(lm.find_layer_by_pos(pos, exclude_layer_id)),
+                    LayerEvent::MouseEvent {
+                        cursor_layer_id,
+                        event,
+                    } => {
+                        let MouseEvent {
+                            down,
+                            up,
+                            pos,
+                            pos_diff,
+                        } = event;
+                        if up.contains(MouseButton::Left) {
+                            drag_layer_id = None;
+                        }
+                        if let Some(layer_id) = drag_layer_id {
+                            lm.move_relative(layer_id, pos_diff);
+                        }
+                        if down.contains(MouseButton::Left) {
+                            drag_layer_id = lm
+                                .layers_by_pos(pos)
+                                .find(|layer| layer.id != cursor_layer_id)
+                                .map(|layer| layer.id());
+                        }
+                    }
                 }
             }
 

@@ -46,23 +46,31 @@ const MOUSE_CURSOR_SHAPE: [[u8; MOUSE_CURSOR_WIDTH]; MOUSE_CURSOR_HEIGHT] = [
 #[bitflags]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MouseButton {
+pub(crate) enum MouseButton {
     Left = 0b001,
     Right = 0b010,
     Middle = 0b100,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct MouseEvent {
+struct RawMouseEvent {
     buttons: BitFlags<MouseButton>,
     displacement: Offset<i32>,
 }
 
-static MOUSE_EVENT_TX: OnceCell<mpsc::Sender<MouseEvent>> = OnceCell::uninit();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MouseEvent {
+    pub(crate) down: BitFlags<MouseButton>,
+    pub(crate) up: BitFlags<MouseButton>,
+    pub(crate) pos: Point<i32>,
+    pub(crate) pos_diff: Offset<i32>,
+}
+
+static MOUSE_EVENT_TX: OnceCell<mpsc::Sender<RawMouseEvent>> = OnceCell::uninit();
 
 pub(crate) extern "C" fn observer(buttons: u8, displacement_x: i8, displacement_y: i8) {
     let buttons = BitFlags::<MouseButton>::from_bits_truncate(buttons);
-    let event = MouseEvent {
+    let event = RawMouseEvent {
         buttons,
         displacement: Offset::new(i32::from(displacement_x), i32::from(displacement_y)),
     };
@@ -115,7 +123,6 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             tx.draw_layer(layer_id)?;
 
             let mut buttons = BitFlags::empty();
-            let mut drag_layer_id = None;
             while let Some(event) = rx.next().await {
                 let prev_cursor_pos = cursor_pos;
                 let prev_buttons = buttons;
@@ -125,22 +132,22 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 }
                 buttons = event.buttons;
 
-                let pressed = buttons & !prev_buttons;
-                let released = prev_buttons & !buttons;
+                let down = buttons & !prev_buttons;
+                let up = prev_buttons & !buttons;
                 let pos_diff = cursor_pos - prev_cursor_pos;
 
                 if prev_cursor_pos != cursor_pos {
                     tx.move_to(layer_id, cursor_pos)?;
                 }
-                if released.contains(MouseButton::Left) {
-                    drag_layer_id = None;
-                }
-                if let Some(layer_id) = drag_layer_id {
-                    tx.move_relative(layer_id, pos_diff)?;
-                }
-                if pressed.contains(MouseButton::Left) {
-                    drag_layer_id = tx.find_layer_by_pos(cursor_pos, layer_id).await?;
-                }
+                tx.mouse_event(
+                    layer_id,
+                    MouseEvent {
+                        down,
+                        up,
+                        pos: cursor_pos,
+                        pos_diff,
+                    },
+                )?;
             }
 
             Ok::<(), Error>(())

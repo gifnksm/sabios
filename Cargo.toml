@@ -18,7 +18,7 @@ panic = "abort"
 [dependencies]
 arrayvec = { version = "0.7.0", default-features = false }
 bit_field = "0.10.1"
-bootloader = "0.10.5"
+bootloader = { version = "0.10.5", git = "https://github.com/gifnksm/bootloader", branch = "force-acpi-v2-rsdp" }
 conquer-once = { version = "0.3.2", default-features = false }
 crossbeam-queue = { version = "0.3.1", default-features = false, features = ["alloc"] }
 custom_debug_derive = "0.5.0"

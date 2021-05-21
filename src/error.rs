@@ -51,6 +51,8 @@ pub(crate) enum ErrorKind {
     TryFromInt(TryFromIntError),
     FrameBufferNotSupported,
     PhysicalMemoryNotMapped,
+    RsdpNotMapped,
+    InvalidRsdp,
     UnsupportedPixelFormat(PixelFormat),
     Deadlock,
     Full,

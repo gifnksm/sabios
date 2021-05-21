@@ -20,6 +20,7 @@ use bootloader::{
 use core::mem;
 use x86_64::VirtAddr;
 
+mod acpi;
 mod allocator;
 mod buffer_drawer;
 mod co_task;
@@ -52,7 +53,7 @@ entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     log::set_level(log::Level::Info);
 
-    let (framebuffer, physical_memory_offset) =
+    let (framebuffer, physical_memory_offset, rsdp) =
         extract_boot_info(boot_info).expect("failed to extract boot_info");
 
     // Initialize framebuffer for boot log
@@ -83,6 +84,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     xhc::init(&devices, &mut mapper).expect("failed to initialize xHC");
 
     // Initialize LAPIC timer
+    unsafe { acpi::init(&mut mapper, rsdp) }.expect("failed to initialize acpi");
     timer::lapic::init();
 
     let console_param = console::start_window_mode().expect("failed to start console window mode");
@@ -120,7 +122,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     executor.run();
 }
 
-fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr)> {
+fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr, VirtAddr)> {
     let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
         .into_option()
         .ok_or(ErrorKind::FrameBufferNotSupported)?;
@@ -132,7 +134,14 @@ fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr)
         .ok_or(ErrorKind::PhysicalMemoryNotMapped)?;
     let physical_memory_offset = VirtAddr::new(physical_memory_offset);
 
-    Ok((framebuffer, physical_memory_offset))
+    let rsdp = boot_info
+        .rsdp_addr
+        .as_ref()
+        .copied()
+        .ok_or(ErrorKind::RsdpNotMapped)?;
+    let rsdp = VirtAddr::new(rsdp);
+
+    Ok((framebuffer, physical_memory_offset, rsdp))
 }
 
 fn hlt_loop() -> ! {

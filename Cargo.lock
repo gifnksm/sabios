@@ -54,8 +54,7 @@ dependencies = [
 [[package]]
 name = "bootloader"
 version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a163abbdf828b0e6bd3a35e8b07f411ace625d5cc2b980ba72515ea3fbb101"
+source = "git+https://github.com/gifnksm/bootloader?branch=force-acpi-v2-rsdp#45b01fdefee9698ec412291904e19abe91d11c04"
 
 [[package]]
 name = "bootloader-locator"

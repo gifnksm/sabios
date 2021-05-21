@@ -30,7 +30,7 @@ pub fn _print(args: fmt::Arguments) {
         if let Ok(mut console) = CONSOLE.try_lock() {
             let _ = console.with_writer(|mut writer| {
                 #[allow(clippy::unwrap_used)]
-                writer.write_fmt(args).unwrap();
+                writer.write_fmt(args).unwrap(); // never fail
             });
         }
     })
@@ -89,7 +89,6 @@ impl RedrawArea {
         }
     }
 
-    #[allow(clippy::unwrap_used)]
     fn scroll(&mut self) {
         self.scroll += 1;
         if let Some(area) = self.area {
@@ -277,7 +276,7 @@ pub(crate) struct ConsoleInitParam {
 pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
     let font_size = font::FONT_PIXEL_SIZE;
     let window_size = Size::new(COLUMNS as i32 * font_size.x, ROWS as i32 * font_size.y);
-    let window = Window::new(window_size);
+    let window = Window::new(window_size)?;
     let (tx, rx) = mpsc::channel(100);
     {
         interrupts::without_interrupts(|| {

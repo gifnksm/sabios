@@ -31,7 +31,7 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
 pub(crate) async fn handler_task() {
     let res = async {
         let screen_info = *framebuffer::info();
-        let window = Window::new(screen_info.size);
+        let window = Window::new(screen_info.size)?;
 
         window.with_lock(|window| {
             draw(window, screen_info.size);

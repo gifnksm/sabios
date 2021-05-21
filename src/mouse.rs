@@ -82,7 +82,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let window = Window::new(MOUSE_CURSOR_SIZE);
+            let window = Window::new(MOUSE_CURSOR_SIZE)?;
             window.with_lock(|window| {
                 window.set_transparent_color(Some(TRANSPARENT_COLOR));
                 draw(window);

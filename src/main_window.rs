@@ -38,7 +38,7 @@ impl Future for Yield {
 
 pub(crate) async fn handler_task() {
     let res = async {
-        let window = Window::new(Size::new(160, 52));
+        let window = Window::new(Size::new(160, 52))?;
 
         window.with_lock(|window| {
             window::draw_window(window, "Hello Window");

@@ -16,14 +16,13 @@ pub(crate) struct Window {
 }
 
 impl Window {
-    pub(crate) fn new(size: Size<i32>) -> Arc<Mutex<Self>> {
+    pub(crate) fn new(size: Size<i32>) -> Result<Arc<Mutex<Self>>> {
         let screen_info = *framebuffer::info();
-        #[allow(clippy::unwrap_used)]
         let window = Arc::new(Mutex::new(Self {
             transparent_color: None,
-            shadow_buffer: ShadowBuffer::new_shadow(size, screen_info).unwrap(),
+            shadow_buffer: ShadowBuffer::new_shadow(size, screen_info)?,
         }));
-        window
+        Ok(window)
     }
 
     pub(crate) fn size(&self) -> Size<i32> {

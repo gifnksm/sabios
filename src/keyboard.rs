@@ -1,6 +1,7 @@
 use crate::{
     prelude::*,
     sync::{mpsc, OnceCell},
+    text_window,
 };
 use core::future::Future;
 use enumflags2::{bitflags, BitFlags};
@@ -96,6 +97,13 @@ struct RawKeyboardEvent {
     keycode: u8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct KeyboardEvent {
+    pub(crate) modifier: BitFlags<Modifier>,
+    pub(crate) keycode: u8,
+    pub(crate) ascii: char,
+}
+
 static KEYBOARD_EVENT_TX: OnceCell<mpsc::Sender<RawKeyboardEvent>> = OnceCell::uninit();
 
 pub(crate) extern "C" fn observer(modifier: u8, keycode: u8) {
@@ -114,16 +122,31 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     KEYBOARD_EVENT_TX.init_once(|| tx);
 
     async move {
-        while let Some(event) = rx.next().await {
-            let ch = if event
-                .modifier
-                .intersects(Modifier::LShift | Modifier::RShift)
-            {
-                KEYCODE_MAP_SHIFT[usize::from(event.keycode)]
-            } else {
-                KEYCODE_MAP[usize::from(event.keycode)]
-            };
-            crate::print!("{}", ch);
+        let res = async {
+            let tx = text_window::sender();
+
+            while let Some(event) = rx.next().await {
+                let ascii = if event
+                    .modifier
+                    .intersects(Modifier::LShift | Modifier::RShift)
+                {
+                    KEYCODE_MAP_SHIFT[usize::from(event.keycode)]
+                } else {
+                    KEYCODE_MAP[usize::from(event.keycode)]
+                };
+                let event = KeyboardEvent {
+                    modifier: event.modifier,
+                    keycode: event.keycode,
+                    ascii,
+                };
+                tx.send(event)?;
+            }
+            Ok::<(), Error>(())
+        }
+        .await;
+
+        if let Err(err) = res {
+            panic!("error occurred during handling keyboard event: {}", err);
         }
     }
 }

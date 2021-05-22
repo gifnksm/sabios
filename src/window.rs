@@ -139,3 +139,38 @@ where
         }
     }
 }
+
+pub(crate) fn draw_text_box<D>(drawer: &mut D, area: Rectangle<i32>)
+where
+    D: Draw,
+{
+    // fill main box
+    drawer.fill_rect(
+        Rectangle::new(area.pos + Offset::new(1, 1), area.size - Offset::new(2, 2)),
+        Color::WHITE,
+    );
+
+    // draw border lines
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(area.size.x, 1)),
+        EDGE_DARK,
+    );
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(1, area.size.y)),
+        EDGE_DARK,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(0, area.size.y),
+            Size::new(area.size.x, 1),
+        ),
+        EDGE_LIGHT,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(area.size.x, 0),
+            Size::new(1, area.size.y),
+        ),
+        EDGE_LIGHT,
+    );
+}

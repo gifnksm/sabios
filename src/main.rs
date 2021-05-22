@@ -44,6 +44,7 @@ mod paging;
 mod pci;
 mod prelude;
 mod sync;
+mod text_window;
 mod timer;
 mod window;
 mod xhc;
@@ -99,6 +100,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     executor.spawn(CoTask::new(desktop::handler_task()));
     executor.spawn(CoTask::new(console::handler_task(console_param)));
     executor.spawn(CoTask::new(main_window::handler_task()));
+    executor.spawn(CoTask::new(text_window::handler_task()));
     executor.spawn(CoTask::new(layer::handler_task()));
 
     executor.spawn(CoTask::new(async {

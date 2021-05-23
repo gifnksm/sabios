@@ -114,7 +114,7 @@ static FADT: OnceCell<&Fadt> = OnceCell::uninit();
 unsafe fn sum_bytes<T>(data: &T, bytes: usize) -> u8 {
     let data = data as *const T as *const u8;
     let data = unsafe { slice::from_raw_parts(data, bytes) };
-    data.iter().sum()
+    data.iter().copied().fold(0, u8::wrapping_add)
 }
 
 /// # Safety

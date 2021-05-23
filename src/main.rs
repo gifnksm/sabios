@@ -1,6 +1,8 @@
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::expect_used)]
+#![feature(asm)]
+#![feature(naked_functions)]
 #![feature(abi_x86_interrupt)]
 #![feature(alloc_error_handler)]
 #![feature(const_mut_refs)]
@@ -12,6 +14,8 @@ extern crate alloc;
 use self::{
     co_task::{CoTask, Executor},
     prelude::*,
+    sync::OnceCell,
+    task::Task,
 };
 use bootloader::{
     boot_info::{FrameBuffer, Optional},
@@ -45,6 +49,7 @@ mod paging;
 mod pci;
 mod prelude;
 mod sync;
+mod task;
 mod text_window;
 mod timer;
 mod window;
@@ -119,12 +124,37 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
     }));
 
+    TASK_MAIN.init_once(|| Task::new(dummy_task, 0, 0));
+    TASK_B.init_once(|| Task::new(task_b, 1, 42));
+
+    executor.spawn(CoTask::new(async {
+        for i in 0.. {
+            println!("Hello from taskA {}", i);
+            co_task::yield_now().await;
+            Task::switch(TASK_B.get(), TASK_MAIN.get());
+        }
+    }));
+
     x86_64::instructions::interrupts::enable();
 
     // Start running
     println!("Welcome to sabios!");
 
     executor.run();
+}
+
+static TASK_MAIN: OnceCell<Task> = OnceCell::uninit();
+static TASK_B: OnceCell<Task> = OnceCell::uninit();
+
+extern "C" fn dummy_task(_arg0: u64, _arg1: u64) {
+    panic!("dummy task called;")
+}
+
+extern "C" fn task_b(_arg0: u64, _arg1: u64) {
+    for i in 0.. {
+        println!("Hello from taskB {}", i);
+        Task::switch(TASK_MAIN.get(), TASK_B.get());
+    }
 }
 
 fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr, VirtAddr)> {

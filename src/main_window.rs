@@ -1,5 +1,5 @@
 use crate::{
-    font,
+    co_task, font,
     graphics::{Color, Draw, Point, Rectangle, Size},
     layer::{self, Layer},
     prelude::*,
@@ -26,7 +26,7 @@ pub(crate) async fn handler_task() {
         tx.set_height(layer_id, layer::MAIN_WINDOW_ID)?;
         tx.draw_layer(layer_id)?;
 
-        for count in 0..1 {
+        for count in 0.. {
             window.with_lock(|window| {
                 window.fill_rect(
                     Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
@@ -36,6 +36,7 @@ pub(crate) async fn handler_task() {
                 font::draw_str(window, Point::new(24, 28), &s, Color::BLACK);
             });
             tx.draw_layer(layer_id)?;
+            co_task::yield_now().await;
         }
 
         Ok::<(), Error>(())

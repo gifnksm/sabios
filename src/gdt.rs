@@ -4,20 +4,28 @@ use x86_64::{
     structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector},
 };
 
+#[derive(Debug)]
+pub(crate) struct Selectors {
+    pub(crate) kernel_code_selector: SegmentSelector,
+    pub(crate) kernel_stack_selector: SegmentSelector,
+}
+
 static GDT: OnceCell<GlobalDescriptorTable> = OnceCell::uninit();
+static SELECTORS: OnceCell<Selectors> = OnceCell::uninit();
 
 pub(crate) fn init() {
-    let mut code_selector = None;
-    let mut stack_selector = None;
+    let null_segment = SegmentSelector(0);
+    let mut selectors = Selectors {
+        kernel_code_selector: null_segment,
+        kernel_stack_selector: null_segment,
+    };
     GDT.init_once(|| {
         let mut gdt = GlobalDescriptorTable::new();
-        code_selector = Some(gdt.add_entry(Descriptor::kernel_code_segment()));
-        stack_selector = Some(gdt.add_entry(Descriptor::kernel_data_segment()));
+        selectors.kernel_code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
+        selectors.kernel_stack_selector = gdt.add_entry(Descriptor::kernel_data_segment());
         gdt
     });
     GDT.get().load();
-
-    let null_segment = SegmentSelector::new(0, x86_64::PrivilegeLevel::Ring0);
 
     unsafe {
         segmentation::load_ds(null_segment);
@@ -26,10 +34,12 @@ pub(crate) fn init() {
         segmentation::load_gs(null_segment);
     }
 
-    if let Some(stack_selector) = stack_selector {
-        unsafe { segmentation::load_ss(stack_selector) };
-    }
-    if let Some(code_selector) = code_selector {
-        unsafe { segmentation::set_cs(code_selector) };
-    }
+    unsafe { segmentation::load_ss(selectors.kernel_stack_selector) };
+    unsafe { segmentation::set_cs(selectors.kernel_code_selector) };
+
+    SELECTORS.init_once(|| selectors);
+}
+
+pub(crate) fn selectors() -> &'static Selectors {
+    SELECTORS.get()
 }

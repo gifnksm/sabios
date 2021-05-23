@@ -41,3 +41,31 @@ impl CoTask {
         self.future.as_mut().poll(cx)
     }
 }
+
+struct Yield {
+    yielded: bool,
+}
+
+impl Yield {
+    fn new() -> Self {
+        Self { yielded: false }
+    }
+}
+
+impl Future for Yield {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.yielded {
+            cx.waker().wake_by_ref();
+            self.yielded = true;
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
+}
+
+pub(crate) async fn yield_now() {
+    Yield::new().await
+}

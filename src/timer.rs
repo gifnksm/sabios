@@ -61,11 +61,49 @@ pub(crate) mod lapic {
         initial_count().write(0);
     }
 
-    pub(crate) fn register(timeout: u64) -> Result<oneshot::Receiver<u64>> {
+    pub(crate) fn oneshot(timeout: u64) -> Result<oneshot::Receiver<u64>> {
         let (tx, rx) = oneshot::channel();
         let timer = Timer { timeout, tx };
         TIMER_TX.get().send(timer)?;
         Ok(rx)
+    }
+
+    #[derive(Debug)]
+    pub(crate) struct Interval {
+        interval: u64,
+        next: Option<oneshot::Receiver<u64>>,
+    }
+
+    impl Stream for Interval {
+        type Item = Result<u64>;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let mut next = match self.next.take() {
+                Some(next) => next,
+                None => return Poll::Ready(None),
+            };
+            match Pin::new(&mut next).poll(cx) {
+                Poll::Pending => {
+                    self.next = Some(next);
+                    Poll::Pending
+                }
+                Poll::Ready(timeout) => match oneshot(timeout + self.interval) {
+                    Ok(next) => {
+                        self.next = Some(next);
+                        Poll::Ready(Some(Ok(timeout)))
+                    }
+                    Err(err) => Poll::Ready(Some(Err(err))),
+                },
+            }
+        }
+    }
+
+    pub(crate) fn interval(start: u64, interval: u64) -> Result<Interval> {
+        let start = oneshot(start)?;
+        Ok(Interval {
+            interval,
+            next: Some(start),
+        })
     }
 
     #[derive(Debug)]

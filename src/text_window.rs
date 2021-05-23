@@ -1,14 +1,15 @@
 use crate::{
     font,
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     keyboard::KeyboardEvent,
     layer::{self, Layer},
     prelude::*,
     sync::{mpsc, OnceCell},
+    timer,
     window::{self, Window},
 };
 use core::future::Future;
-use futures_util::StreamExt;
+use futures_util::{select_biased, FutureExt, StreamExt};
 
 static KEYBOARD_EVENT_TX: OnceCell<mpsc::Sender<KeyboardEvent>> = OnceCell::uninit();
 
@@ -51,29 +52,53 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
             let mut index = 0;
             let max_chars = (window_size.x - 16) / 8;
-            while let Some(event) = rx.next().await {
-                if event.ascii == '\0' {
-                    continue;
-                }
+            let pos = |index| Point::new(8 + 8 * index, 24 + 6);
+            let draw_cursor = |window: &mut Window, index, visible| {
+                let color = if visible { Color::BLACK } else { Color::WHITE };
+                let pos = pos(index) - Offset::new(0, 1);
+                window.fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
+            };
+            let mut interval = timer::lapic::interval(0, 50)?;
+            let mut cursor_visible = true;
+            loop {
+                select_biased! {
+                    event = rx.next().fuse() => {
+                        let event = match event {
+                            Some(event) => event,
+                            None => break,
+                        };
+                        if event.ascii == '\0' {
+                            continue;
+                        }
 
-                window.with_lock(|window| {
-                    if event.ascii == '\x08' && index > 0 {
-                        index -= 1;
-                        window.fill_rect(
-                            Rectangle::new(Point::new(8 + 8 * index, 24 + 6), Size::new(8, 16)),
-                            Color::WHITE,
-                        );
-                    } else if event.ascii >= ' ' && index < max_chars {
-                        font::draw_char(
-                            window,
-                            Point::new(8 + 8 * index, 24 + 6),
-                            event.ascii,
-                            Color::BLACK,
-                        );
-                        index += 1;
+                        window.with_lock(|window| {
+                            if event.ascii == '\x08' && index > 0 {
+                                draw_cursor(window, index, false);
+                                index -= 1;
+                                window
+                                    .fill_rect(Rectangle::new(pos(index), Size::new(8, 16)), Color::WHITE);
+                                draw_cursor(window, index, cursor_visible);
+                            } else if event.ascii >= ' ' && index < max_chars {
+                                draw_cursor(window, index, false);
+                                font::draw_char(window, pos(index), event.ascii, Color::BLACK);
+                                index += 1;
+                                draw_cursor(window, index, cursor_visible);
+                            }
+                        });
+                        tx.draw_layer(layer_id)?;
                     }
-                });
-                tx.draw_layer(layer_id)?;
+                    timeout = interval.next().fuse() => {
+                        let _timeout = match timeout {
+                            Some(Ok(timeout)) => timeout,
+                            _ => break,
+                        };
+                        cursor_visible = !cursor_visible;
+                        window.with_lock(|window| {
+                            draw_cursor(window, index, cursor_visible);
+                        });
+                        tx.draw_layer(layer_id)?;
+                    }
+                }
             }
 
             Ok::<(), Error>(())

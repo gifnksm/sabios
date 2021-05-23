@@ -18,6 +18,7 @@ use bootloader::{
     entry_point, BootInfo,
 };
 use core::mem;
+use futures_util::StreamExt;
 use x86_64::VirtAddr;
 
 mod acpi;
@@ -105,16 +106,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     executor.spawn(CoTask::new(async {
         #[allow(clippy::unwrap_used)]
-        let timeout = timer::lapic::register(600).unwrap();
+        let timeout = timer::lapic::oneshot(600).unwrap();
         println!("Timer interrupt, timeout = {}", timeout.await);
     }));
     executor.spawn(CoTask::new(async {
-        let mut timeout = 200;
-        for i in 0.. {
-            #[allow(clippy::unwrap_used)]
-            let timer = timer::lapic::register(timeout + 100).unwrap();
-            timeout = timer.await;
+        let mut i = 0;
+        #[allow(clippy::unwrap_used)]
+        let mut timer = timer::lapic::interval(200, 100).unwrap();
+        while let Some(Ok(timeout)) = timer.next().await {
             println!("Timer interrupt, timeout = {}, value = {}", timeout, i);
+            i += 1;
         }
     }));
 

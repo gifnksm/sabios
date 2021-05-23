@@ -16,7 +16,7 @@ pub(crate) mod lapic {
     use volatile::Volatile;
     use x86_64::structures::idt::InterruptStackFrame;
 
-    const COUNT_MAX: u32 = 0xffffffff;
+    const COUNT_MAX: u32 = u32::MAX;
 
     fn lvt_timer() -> Volatile<&'static mut u32> {
         unsafe { Volatile::new((0xfee00320u64 as *mut u32).as_mut().unwrap()) }
@@ -31,8 +31,6 @@ pub(crate) mod lapic {
         unsafe { Volatile::new((0xfee003e0u64 as *mut u32).as_mut().unwrap()) }
     }
 
-    const TIMER_FREQ: u32 = 100;
-
     pub(crate) fn init() {
         divide_config().write(0b1011); // divide 1:1
         lvt_timer().write(0b001 << 16); // masked, one-shot
@@ -42,22 +40,20 @@ pub(crate) mod lapic {
         let elapsed = elapsed();
         stop();
 
-        let lapic_timer_freq = elapsed * 10;
-
         divide_config().write(0b1011); // divide 1:1
         lvt_timer().write((0b010 << 16) | (InterruptIndex::Timer as u32)); // not-masked, periodic
-        initial_count().write(lapic_timer_freq / TIMER_FREQ);
+        initial_count().write(((elapsed as f64) / 10.0) as u32); // interval : 10 ms
     }
 
-    pub(crate) fn start() {
+    fn start() {
         initial_count().write(COUNT_MAX);
     }
 
-    pub(crate) fn elapsed() -> u32 {
+    fn elapsed() -> u32 {
         COUNT_MAX - current_count().read()
     }
 
-    pub(crate) fn stop() {
+    fn stop() {
         initial_count().write(0);
     }
 

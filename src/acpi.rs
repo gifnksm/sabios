@@ -54,13 +54,13 @@ struct DescriptionHeader {
     creator_id: u32,
     creator_revision: u32,
 }
+static_assertions::const_assert_eq!(mem::size_of::<DescriptionHeader>(), 36);
 
 /// Extended System Descriptor Table
 #[derive(Debug)]
 #[repr(C)]
 struct Xsdt {
     header: DescriptionHeader,
-    array_head: (),
 }
 
 impl DescriptionHeader {
@@ -87,9 +87,15 @@ impl Xsdt {
         (self.header.len() - mem::size_of::<DescriptionHeader>()) / mem::size_of::<usize>()
     }
 
-    fn entries(&self) -> &[u64] {
-        let array_head = &self.array_head as *const () as *const u64;
-        unsafe { slice::from_raw_parts(array_head, self.len()) }
+    fn entries(&self) -> impl Iterator<Item = u64> {
+        // `array_head` is not 8-byte aligned, so we cannot treat it as normal `*const u64`.
+        // For example, `slice::from_raw_parts(array_head, len)` panics in debug build.
+        let array_head =
+            unsafe { (&self.header as *const DescriptionHeader).add(1) as *const [u8; 8] };
+        (0..self.len()).map(move |idx| {
+            let bytes = unsafe { array_head.add(idx).read() };
+            u64::from_le_bytes(bytes)
+        })
     }
 }
 
@@ -143,8 +149,6 @@ pub(crate) unsafe fn init(mapper: &mut OffsetPageTable, rsdp: VirtAddr) -> Resul
 
     let fadt = xsdt
         .entries()
-        .iter()
-        .copied()
         .filter_map(|entry| {
             debug!("entry: {:x}", entry);
             map_page(mapper, VirtAddr::new(entry)).unwrap();

@@ -2,6 +2,10 @@
 
 "sabios" is a Toy OS written in Rust.
 
+* [My blog post series (Japanese).][my-blog]
+
+[my-blog]: http://gifnksm.hatenablog.jp/archive/category/%E3%82%BC%E3%83%AD%E3%81%8B%E3%82%89%E3%81%AEOS%E8%87%AA%E4%BD%9C%E5%85%A5%E9%96%80
+
 Inspired by following great pioneers:
 
 * [Writing an OS in Rust][blog-os] by [@phil-opp]

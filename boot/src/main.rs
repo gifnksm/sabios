@@ -44,6 +44,7 @@ fn main() {
 
     // pass the arguments
     build_cmd.arg("builder");
+    build_cmd.arg("--firmware").arg("uefi");
     build_cmd.arg("--kernel-manifest").arg(&kernel_manifest);
     build_cmd.arg("--kernel-binary").arg(&kernel_binary);
     build_cmd.arg("--target-dir").arg(&target_dir);

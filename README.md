@@ -20,9 +20,6 @@ Inspired by following great pioneers:
 ## Instructions
 
 ```console
-# Boot sabios with BIOS bootloader
-$ make run-bios-release
-
 # Boot sabios with UEFI bootloader
 $ make run-uefi-release
 ```

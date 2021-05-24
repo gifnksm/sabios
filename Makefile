@@ -9,14 +9,12 @@ MAKEFLAGS += --no-builtin-rules
 
 
 # goals declaration
-run-bios-debug:       ## Run sabios BIOS disk image with QEMU (debug build)
-run-bios-release:     ## Run sabios BIOS disk image with QEMU (release build)
 run-uefi-debug:       ## Run sabios UEFI disk image with QEMU (debug build)
 run-uefi-release:     ## Run sabios UEFI disk image with QEMU (release build)
 build-debug:          ## Build all artifacts (debug build)
 build-release:        ## Build all artifacts (release build)
-build-image-debug:    ## Build sabios BIOS/UEFI disk image (debug build)
-build-image-release:  ## Build saibos BIOS/UEFI disk image (release build)
+build-image-debug:    ## Build sabios UEFI disk image (debug build)
+build-image-release:  ## Build saibos UEFI disk image (release build)
 build-kernel-debug:   ## Build sabios kernel executable (debug build)
 build-kernel-release: ## Build sabios kernel executable (release build)
 clean:                ## Clean build directory
@@ -32,9 +30,6 @@ TARGET := x86_64-sabios
 OVMF_FILE := /usr/share/OVMF/x64/OVMF.fd
 
 # artifacts
-BIOS_IMAGE_DEBUG        := target/$(TARGET)/debug/boot-bios-sabios.img
-BIOS_IMAGE_RELEASE      := target/$(TARGET)/release/boot-bios-sabios.img
-
 UEFI_IMAGE_DEBUG        := target/$(TARGET)/debug/boot-uefi-sabios.img
 UEFI_IMAGE_RELEASE      := target/$(TARGET)/release/boot-uefi-sabios.img
 UEFI_EXECUTABLE_DEBUG   := target/$(TARGET)/debug/boot-uefi-sabios.efi
@@ -47,10 +42,6 @@ KERNEL_RELEASE := target/$(TARGET)/release/sabios
 
 
 # goald definition
-run-bios-debug:   qemu-bios-debug
-run-bios-release: qemu-bios-release
-.PHONY: run-bios-debug run-bios-release
-
 run-uefi-debug:   qemu-uefi-debug
 run-uefi-release: qemu-uefi-release
 .PHONY: run-uefi-debug run-uefi-release
@@ -59,8 +50,8 @@ build-debug:   build-image-debug   build-kernel-debug
 build-release: build-image-release build-image-release
 .PHONY: build-debug build-release
 
-build-image-debug:   $(BIOS_IMAGE_DEBUG)   $(UEFI_IMAGE_DEBUG)
-build-image-release: $(BIOS_IMAGE_RELEASE) $(UEFI_IMAGE_RELEASE)
+build-image-debug:   $(UEFI_IMAGE_DEBUG)
+build-image-release: $(UEFI_IMAGE_RELEASE)
 .PHONY: build-image-debug
 .PHONY: build-image-elease
 
@@ -89,11 +80,6 @@ ifdef QEMU_DEBUG
     QEMU_OPTS += -d int --no-reboot --no-shutdown
 endif
 
-qemu-bios-debug:   BIOS_IMAGE:=$(BIOS_IMAGE_DEBUG)
-qemu-bios-release: BIOS_IMAGE:=$(BIOS_IMAGE_RELEASE)
-qemu-bios-%: cargo-run-boot-%
-	$(QEMU) -drive format=raw,file=$(BIOS_IMAGE) $(QEMU_OPTS)
-
 qemu-uefi-debug:   UEFI_IMAGE:=$(UEFI_IMAGE_DEBUG)
 qemu-uefi-release: UEFI_IMAGE:=$(UEFI_IMAGE_RELEASE)
 qemu-uefi-%: cargo-run-boot-% | $(OVMF_FILE)
@@ -119,8 +105,6 @@ cargo-clean:
 .PHONY: cargo-clean
 
 # files
-$(BIOS_IMAGE_DEBUG):        cargo-run-boot-debug
-$(BIOS_IMAGE_RELEASE):      cargo-run-boot-release
 $(UEFI_IMAGE_DEBUG):        cargo-run-boot-debug
 $(UEFI_IMAGE_RELEASE):      cargo-run-boot-release
 $(UEFI_EXECUTABLE_DEBUG):   cargo-run-boot-debug

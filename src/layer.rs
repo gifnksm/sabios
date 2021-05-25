@@ -1,17 +1,19 @@
 use crate::{
     buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
-    framebuffer,
-    graphics::{Draw, Offset, Point, Rectangle},
+    framebuffer::{self, ScreenInfo},
+    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     mouse::{MouseButton, MouseEvent},
     prelude::*,
-    sync::{mpsc, Mutex, MutexGuard, OnceCell},
+    sync::{mpsc, oneshot, Mutex, MutexGuard, OnceCell},
     window::Window,
 };
-use alloc::{collections::BTreeMap, sync::Arc, vec, vec::Vec};
+use alloc::{collections::BTreeMap, vec, vec::Vec};
 use core::{
     future::Future,
     sync::atomic::{AtomicU32, Ordering},
 };
+use custom_debug_derive::Debug as CustomDebug;
+use derivative::Derivative;
 use futures_util::StreamExt as _;
 
 pub(crate) const DESKTOP_HEIGHT: usize = 0;
@@ -29,12 +31,71 @@ impl LayerId {
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(clone_from = "true"))]
+#[derive(CustomDebug)]
+pub(crate) struct LayerBuffer {
+    transparent_color: Option<Color>,
+    #[debug(skip)]
+    buffer: ShadowBuffer,
+}
+
+impl Draw for LayerBuffer {
+    fn size(&self) -> Size<i32> {
+        self.buffer.size()
+    }
+
+    fn draw(&mut self, p: Point<i32>, c: Color) {
+        self.buffer.draw(p, c)
+    }
+
+    fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
+        self.buffer.move_area(offset, src)
+    }
+}
+
+impl LayerBuffer {
+    pub(crate) fn new(size: Size<i32>, screen_info: ScreenInfo) -> Result<Self> {
+        Ok(Self {
+            transparent_color: None,
+            buffer: ShadowBuffer::new_shadow(size, screen_info)?,
+        })
+    }
+
+    pub(crate) fn set_transparent_color(&mut self, tc: Option<Color>) {
+        self.transparent_color = tc;
+    }
+
+    fn draw_to<B>(
+        &self,
+        drawer: &mut BufferDrawer<B>,
+        src_dst_offset: Offset<i32>,
+        src_area: Rectangle<i32>,
+    ) where
+        B: Buffer,
+    {
+        if let Some(src_area) = src_area & self.buffer.area() {
+            if let Some(tc) = self.transparent_color {
+                for p in src_area.points() {
+                    if let Some(c) = self.buffer.color_at(p) {
+                        if tc != c {
+                            drawer.draw(p + src_dst_offset, c);
+                        }
+                    }
+                }
+            } else {
+                drawer.copy(src_dst_offset, &self.buffer, src_area);
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Layer {
     id: LayerId,
     pos: Point<i32>,
     draggable: bool,
-    window: Option<Arc<Mutex<Window>>>,
+    buffer: Option<LayerBuffer>,
 }
 
 impl Layer {
@@ -43,7 +104,7 @@ impl Layer {
             id: LayerId::new(),
             pos: Point::new(0, 0),
             draggable: false,
-            window: None,
+            buffer: None,
         }
     }
 
@@ -55,30 +116,30 @@ impl Layer {
         self.draggable = draggable;
     }
 
-    pub(crate) fn set_window(&mut self, window: Option<Arc<Mutex<Window>>>) {
-        self.window = window;
-    }
-
-    // fn window(&mut self) -> Option<Arc<Mutex<Window>>> {
-    //     self.window.clone()
-    // }
-
     pub(crate) fn move_to(&mut self, pos: Point<i32>) {
         self.pos = pos;
     }
 
     fn area(&self) -> Option<Rectangle<i32>> {
+        let buffer = self.buffer.as_ref()?;
         let pos = self.pos;
-        let size = self.window.as_ref()?.lock().size();
+        let size = buffer.size();
         Some(Rectangle { pos, size })
+    }
+
+    fn set_buffer(&mut self, buffer: LayerBuffer) -> Option<LayerBuffer> {
+        self.buffer.replace(buffer)
     }
 
     fn draw_to<B>(&self, drawer: &mut BufferDrawer<B>, dst_area: Rectangle<i32>)
     where
         B: Buffer,
     {
-        if let Some(window) = self.window.as_ref() {
-            window.lock().draw_to(drawer, self.pos, dst_area - self.pos)
+        let src_dst_offset = self.pos;
+        let src_area = dst_area - self.pos;
+
+        if let Some(buffer) = &self.buffer {
+            buffer.draw_to(drawer, src_dst_offset, src_area);
         }
     }
 }
@@ -122,6 +183,11 @@ impl LayerManager {
         }
 
         self.finish_draw(dst_area);
+    }
+
+    fn set_buffer(&mut self, layer_id: LayerId, buffer: LayerBuffer) -> Option<LayerBuffer> {
+        let layer = self.layers.get_mut(&layer_id)?;
+        layer.set_buffer(buffer)
     }
 
     fn draw_layer(&mut self, layer_id: LayerId) {
@@ -214,6 +280,8 @@ enum LayerEvent {
     },
     DrawLayer {
         layer_id: LayerId,
+        buffer: LayerBuffer,
+        tx: oneshot::Sender<Option<LayerBuffer>>,
     },
     MoveTo {
         layer_id: LayerId,
@@ -240,6 +308,59 @@ pub(crate) fn event_tx() -> EventSender {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct LayerDrawer {
+    buffer_rx: Option<oneshot::Receiver<Option<LayerBuffer>>>,
+    sender: EventSender,
+}
+
+impl LayerDrawer {
+    pub(crate) fn new() -> Self {
+        Self {
+            buffer_rx: None,
+            sender: event_tx(),
+        }
+    }
+
+    pub(crate) async fn draw(&mut self, layer_id: LayerId, window: &Window) -> Result<()> {
+        let buffer = if let Some(rx) = self.buffer_rx.take() {
+            rx.await
+        } else {
+            None
+        };
+        let buffer = window.clone_buffer(buffer);
+        let (tx, rx) = oneshot::channel();
+        self.buffer_rx = Some(rx);
+        self.sender.send(LayerEvent::DrawLayer {
+            layer_id,
+            buffer,
+            tx,
+        })?;
+        Ok(())
+    }
+
+    pub(crate) async fn draw_shared(
+        &mut self,
+        layer_id: LayerId,
+        window: &Mutex<Window>,
+    ) -> Result<()> {
+        let buffer = if let Some(rx) = self.buffer_rx.take() {
+            rx.await
+        } else {
+            None
+        };
+        let buffer = window.with_lock(|window| window.clone_buffer(buffer));
+        let (tx, rx) = oneshot::channel();
+        self.buffer_rx = Some(rx);
+        self.sender.send(LayerEvent::DrawLayer {
+            layer_id,
+            buffer,
+            tx,
+        })?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct EventSender {
     tx: mpsc::Sender<LayerEvent>,
@@ -252,10 +373,6 @@ impl EventSender {
 
     pub(crate) fn register(&self, layer: Layer) -> Result<()> {
         self.send(LayerEvent::Register { layer })
-    }
-
-    pub(crate) fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
-        self.send(LayerEvent::DrawLayer { layer_id })
     }
 
     pub(crate) fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
@@ -291,7 +408,15 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => lm.register(layer),
-                    LayerEvent::DrawLayer { layer_id } => lm.draw_layer(layer_id),
+                    LayerEvent::DrawLayer {
+                        layer_id,
+                        buffer,
+                        tx,
+                    } => {
+                        let old_buffer = lm.set_buffer(layer_id, buffer);
+                        lm.draw_layer(layer_id);
+                        tx.send(old_buffer);
+                    }
                     LayerEvent::MoveTo { layer_id, pos } => lm.move_to(layer_id, pos),
                     LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
                     // LayerEvent::Hide { layer_id } => lm.hide(layer_id),

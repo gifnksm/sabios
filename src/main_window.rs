@@ -1,7 +1,7 @@
 use crate::{
     co_task, font,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, Layer},
+    layer::{self, Layer, LayerDrawer},
     prelude::*,
     window::{self, Window},
 };
@@ -9,33 +9,29 @@ use alloc::format;
 
 pub(crate) async fn handler_task() {
     let res = async {
-        let window = Window::new(Size::new(160, 52))?;
+        let mut window = Window::new(Size::new(160, 52))?;
 
-        window.with_lock(|window| {
-            window::draw_window(window, "Hello Window");
-        });
+        window::draw_window(&mut window, "Hello Window");
 
         let mut layer = Layer::new();
         let layer_id = layer.id();
         layer.set_draggable(true);
-        layer.set_window(Some(window.clone()));
         layer.move_to(Point::new(300, 100));
 
         let tx = layer::event_tx();
+        let mut drawer = LayerDrawer::new();
         tx.register(layer)?;
         tx.set_height(layer_id, layer::MAIN_WINDOW_ID)?;
-        tx.draw_layer(layer_id)?;
+        drawer.draw(layer_id, &window).await?;
 
         for count in 0.. {
-            window.with_lock(|window| {
-                window.fill_rect(
-                    Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
-                    Color::from_code(0xc6c6c6),
-                );
-                let s = format!("{:010}", count);
-                font::draw_str(window, Point::new(24, 28), &s, Color::BLACK);
-            });
-            tx.draw_layer(layer_id)?;
+            window.fill_rect(
+                Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
+                Color::from_code(0xc6c6c6),
+            );
+            let s = format!("{:010}", count);
+            font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
+            drawer.draw(layer_id, &window).await?;
             co_task::yield_now().await;
         }
 

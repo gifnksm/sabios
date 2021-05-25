@@ -2,7 +2,7 @@ use crate::{
     font,
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     keyboard::KeyboardEvent,
-    layer::{self, Layer},
+    layer::{self, Layer, LayerDrawer},
     prelude::*,
     sync::{mpsc, OnceCell},
     timer,
@@ -25,30 +25,27 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     async move {
         let res = async {
             let window_size = Size::new(160, 52);
-            let window = Window::new(window_size)?;
+            let mut window = Window::new(window_size)?;
 
-            window.with_lock(|window| {
-                window::draw_window(window, "Text Box Test");
-
-                window::draw_text_box(
-                    window,
-                    Rectangle::new(
-                        Point::new(4, 24),
-                        Size::new(window_size.x - 8, window_size.y - 24 - 4),
-                    ),
-                );
-            });
+            window::draw_window(&mut window, "Text Box Test");
+            window::draw_text_box(
+                &mut window,
+                Rectangle::new(
+                    Point::new(4, 24),
+                    Size::new(window_size.x - 8, window_size.y - 24 - 4),
+                ),
+            );
 
             let mut layer = Layer::new();
             let layer_id = layer.id();
             layer.set_draggable(true);
-            layer.set_window(Some(window.clone()));
             layer.move_to(Point::new(350, 200));
 
             let tx = layer::event_tx();
+            let mut drawer = LayerDrawer::new();
             tx.register(layer)?;
             tx.set_height(layer_id, usize::MAX)?;
-            tx.draw_layer(layer_id)?;
+            drawer.draw(layer_id, &window).await?;
 
             let mut index = 0;
             let max_chars = (window_size.x - 16) / 8;
@@ -71,21 +68,18 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                             continue;
                         }
 
-                        window.with_lock(|window| {
-                            if event.ascii == '\x08' && index > 0 {
-                                draw_cursor(window, index, false);
-                                index -= 1;
-                                window
-                                    .fill_rect(Rectangle::new(pos(index), Size::new(8, 16)), Color::WHITE);
-                                draw_cursor(window, index, cursor_visible);
-                            } else if event.ascii >= ' ' && index < max_chars {
-                                draw_cursor(window, index, false);
-                                font::draw_char(window, pos(index), event.ascii, Color::BLACK);
-                                index += 1;
-                                draw_cursor(window, index, cursor_visible);
-                            }
-                        });
-                        tx.draw_layer(layer_id)?;
+                        if event.ascii == '\x08' && index > 0 {
+                            draw_cursor(&mut window, index, false);
+                            index -= 1;
+                            window
+                                .fill_rect(Rectangle::new(pos(index), Size::new(8, 16)), Color::WHITE);
+                            draw_cursor(&mut window, index, cursor_visible);
+                        } else if event.ascii >= ' ' && index < max_chars {
+                            draw_cursor(&mut window, index, false);
+                            font::draw_char(&mut window, pos(index), event.ascii, Color::BLACK);
+                            index += 1;
+                            draw_cursor(&mut window, index, cursor_visible);
+                        }
                     }
                     timeout = interval.next().fuse() => {
                         let _timeout = match timeout {
@@ -93,12 +87,10 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                             _ => break,
                         };
                         cursor_visible = !cursor_visible;
-                        window.with_lock(|window| {
-                            draw_cursor(window, index, cursor_visible);
-                        });
-                        tx.draw_layer(layer_id)?;
+                            draw_cursor(&mut window, index, cursor_visible);
                     }
                 }
+                drawer.draw(layer_id, &window).await?;
             }
 
             Ok::<(), Error>(())

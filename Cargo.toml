@@ -23,6 +23,7 @@ bootloader = "0.10.5"
 conquer-once = { version = "0.3.2", default-features = false }
 crossbeam-queue = { version = "0.3.1", default-features = false, features = ["alloc"] }
 custom_debug_derive = "0.5.0"
+derivative = { version = "2.2.0", features = ["use_core"] }
 enumflags2 = "0.7.1"
 futures-util = { version = "0.3.15", default-features = false, features = ["alloc", "async-await-macro"] }
 linked_list_allocator = "0.9.0"

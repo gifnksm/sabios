@@ -6,6 +6,8 @@ use crate::{
 use alloc::{vec, vec::Vec};
 use bootloader::boot_info::{FrameBuffer, PixelFormat};
 use core::{cmp::Ordering, convert::TryFrom, ptr};
+use custom_debug_derive::Debug as CustomDebug;
+use derivative::Derivative;
 
 pub(crate) type FrameBufferDrawer = BufferDrawer<FrameBuffer>;
 pub(crate) type ShadowBuffer = BufferDrawer<Vec<u8>>;
@@ -35,11 +37,15 @@ impl Buffer for Vec<u8> {
     }
 }
 
+#[derive(Derivative)]
+#[derivative(Clone(clone_from = "true"))]
+#[derive(CustomDebug)]
 pub(crate) struct BufferDrawer<B> {
     size: Size<i32>,
     stride: i32,
     bytes_per_pixel: i32,
     pixel_format: PixelFormat,
+    #[debug(skip)]
     pixel_drawer: &'static (dyn PixelDraw + Send + Sync),
     buffer: B,
 }

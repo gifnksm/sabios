@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Offset, Point},
-    layer::{self, Layer},
+    layer::{self, Layer, LayerDrawer},
     prelude::*,
     sync::{mpsc, OnceCell},
     window::Window,
@@ -103,24 +103,22 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let window = Window::new(MOUSE_CURSOR_SIZE)?;
-            window.with_lock(|window| {
-                window.set_transparent_color(Some(TRANSPARENT_COLOR));
-                draw(window);
-            });
+            let mut window = Window::new(MOUSE_CURSOR_SIZE)?;
+            window.set_transparent_color(Some(TRANSPARENT_COLOR));
+            draw(&mut window);
 
             let mut cursor_pos = Point::new(300, 200);
             let screen_info = *framebuffer::info();
 
             let mut layer = Layer::new();
             let layer_id = layer.id();
-            layer.set_window(Some(window));
             layer.move_to(cursor_pos);
 
             let tx = layer::event_tx();
+            let mut drawer = LayerDrawer::new();
             tx.register(layer)?;
             tx.set_height(layer_id, layer::MOUSE_CURSOR_HEIGHT)?;
-            tx.draw_layer(layer_id)?;
+            drawer.draw(layer_id, &window).await?;
 
             let mut buttons = BitFlags::empty();
             while let Some(event) = rx.next().await {

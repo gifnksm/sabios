@@ -1,76 +1,47 @@
 use crate::{
-    buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
     font, framebuffer,
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
+    layer::LayerBuffer,
     prelude::*,
-    sync::Mutex,
 };
-use alloc::sync::Arc;
-use custom_debug_derive::Debug as CustomDebug;
 
-#[derive(CustomDebug)]
+#[derive(Debug)]
 pub(crate) struct Window {
-    transparent_color: Option<Color>,
-    #[debug(skip)]
-    shadow_buffer: ShadowBuffer,
+    buffer: LayerBuffer,
 }
 
 impl Window {
-    pub(crate) fn new(size: Size<i32>) -> Result<Arc<Mutex<Self>>> {
+    pub(crate) fn new(size: Size<i32>) -> Result<Self> {
         let screen_info = *framebuffer::info();
-        let window = Arc::new(Mutex::new(Self {
-            transparent_color: None,
-            shadow_buffer: ShadowBuffer::new_shadow(size, screen_info)?,
-        }));
-        Ok(window)
-    }
-
-    pub(crate) fn size(&self) -> Size<i32> {
-        self.shadow_buffer.size()
+        let buffer = LayerBuffer::new(size, screen_info)?;
+        Ok(Self { buffer })
     }
 
     pub(crate) fn set_transparent_color(&mut self, tc: Option<Color>) {
-        self.transparent_color = tc;
+        self.buffer.set_transparent_color(tc);
     }
 
-    pub(crate) fn draw_to<B>(
-        &self,
-        drawer: &mut BufferDrawer<B>,
-        src_dst_offset: Offset<i32>,
-        src_area: Rectangle<i32>,
-    ) where
-        B: Buffer,
-    {
-        (|| {
-            let src_area = (src_area & self.shadow_buffer.area())?;
-            if let Some(tc) = self.transparent_color {
-                for p in src_area.points() {
-                    if let Some(c) = self.shadow_buffer.color_at(p) {
-                        if tc != c {
-                            drawer.draw(p + src_dst_offset, c);
-                        }
-                    }
-                }
-            } else {
-                drawer.copy(src_dst_offset, &self.shadow_buffer, src_area);
-            }
-
-            Some(())
-        })();
+    pub(crate) fn clone_buffer(&self, buffer: Option<LayerBuffer>) -> LayerBuffer {
+        if let Some(mut buffer) = buffer {
+            buffer.clone_from(&self.buffer);
+            buffer
+        } else {
+            self.buffer.clone()
+        }
     }
 }
 
 impl Draw for Window {
     fn size(&self) -> Size<i32> {
-        self.shadow_buffer.size()
+        self.buffer.size()
     }
 
     fn draw(&mut self, p: Point<i32>, c: Color) {
-        self.shadow_buffer.draw(p, c);
+        self.buffer.draw(p, c);
     }
 
     fn move_area(&mut self, offset: Point<i32>, src: Rectangle<i32>) {
-        self.shadow_buffer.move_area(offset, src);
+        self.buffer.move_area(offset, src);
     }
 }
 

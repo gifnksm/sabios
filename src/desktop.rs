@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, Layer},
+    layer::{self, Layer, LayerDrawer},
     prelude::*,
     window::Window,
 };
@@ -31,21 +31,19 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
 pub(crate) async fn handler_task() {
     let res = async {
         let screen_info = *framebuffer::info();
-        let window = Window::new(screen_info.size)?;
+        let mut window = Window::new(screen_info.size)?;
 
-        window.with_lock(|window| {
-            draw(window, screen_info.size);
-        });
+        draw(&mut window, screen_info.size);
 
         let mut layer = Layer::new();
         let layer_id = layer.id();
-        layer.set_window(Some(window));
         layer.move_to(Point::new(0, 0));
 
         let tx = layer::event_tx();
+        let mut drawer = LayerDrawer::new();
         tx.register(layer)?;
         tx.set_height(layer_id, layer::DESKTOP_HEIGHT)?;
-        tx.draw_layer(layer_id)?;
+        drawer.draw(layer_id, &window).await?;
 
         Ok::<(), Error>(())
     }

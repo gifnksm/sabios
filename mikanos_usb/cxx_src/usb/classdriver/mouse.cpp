@@ -15,7 +15,7 @@ Error HIDMouseDriver::OnDataReceived() {
   int8_t displacement_x = Buffer()[1];
   int8_t displacement_y = Buffer()[2];
   NotifyMouseMove(buttons, displacement_x, displacement_y);
-  Log(kDebug, "%02x,(%3d,%3d)\n", buttons, displacement_x, displacement_y);
+  Log(kTrace, "%02x,(%3d,%3d)\n", buttons, displacement_x, displacement_y);
   return MAKE_ERROR(Error::kSuccess);
 }
 

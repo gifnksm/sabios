@@ -27,36 +27,42 @@ DataStageTRB MakeDataStageTRB(const void *buf, int len, bool dir_in) {
   return data;
 }
 
-void Log(LogLevel level, const DataStageTRB &trb) {
-  Log(level, "DataStageTRB: len %d, buf 0x%08lx, dir %d, attr 0x%02x\n",
-      trb.bits.trb_transfer_length, trb.bits.data_buffer_pointer, trb.bits.direction,
-      trb.data[3] & 0x7fu);
+void _Log(LogLevel level, const char *file, uint32_t line, bool cont_flag,
+          const DataStageTRB &trb) {
+  _Log(level, file, line, false, "DataStageTRB: len %d, buf 0x%08lx, dir %d, attr 0x%02x\n",
+       trb.bits.trb_transfer_length, trb.bits.data_buffer_pointer, trb.bits.direction,
+       trb.data[3] & 0x7fu);
 }
 
-void Log(LogLevel level, const SetupStageTRB &trb) {
-  Log(level, "  SetupStage TRB: req_type %02x, req %02x, val %02x, ind %02x, len %02x\n",
-      trb.bits.request_type, trb.bits.request, trb.bits.value, trb.bits.index, trb.bits.length);
+void _Log(LogLevel level, const char *file, uint32_t line, bool cont_flag,
+          const SetupStageTRB &trb) {
+  _Log(level, file, line, false,
+       "  SetupStage TRB: req_type %02x, req %02x, val %02x, ind %02x, len %02x\n",
+       trb.bits.request_type, trb.bits.request, trb.bits.value, trb.bits.index, trb.bits.length);
 }
 
-void Log(LogLevel level, const TransferEventTRB &trb) {
+void _Log(LogLevel level, const char *file, uint32_t line, bool cont_flag,
+          const TransferEventTRB &trb) {
   if (trb.bits.event_data) {
-    Log(level, "Transfer (value %08lx) completed: %s, residual length %d, slot %d, ep addr %d\n",
-        reinterpret_cast<uint64_t>(trb.Pointer()),
-        kTRBCompletionCodeToName[trb.bits.completion_code], trb.bits.trb_transfer_length,
-        trb.bits.slot_id, trb.EndpointID().Address());
+    _Log(level, file, line, false,
+         "Transfer (value %08lx) completed: %s, residual length %d, slot %d, ep addr %d\n",
+         reinterpret_cast<uint64_t>(trb.Pointer()),
+         kTRBCompletionCodeToName[trb.bits.completion_code], trb.bits.trb_transfer_length,
+         trb.bits.slot_id, trb.EndpointID().Address());
     return;
   }
 
   TRB *issuer_trb = trb.Pointer();
-  Log(level, "%s completed: %s, residual length %d, slot %d, ep addr %d\n",
-      kTRBTypeToName[issuer_trb->bits.trb_type], kTRBCompletionCodeToName[trb.bits.completion_code],
-      trb.bits.trb_transfer_length, trb.bits.slot_id, trb.EndpointID().Address());
+  _Log(level, file, line, false, "%s completed: %s, residual length %d, slot %d, ep addr %d\n",
+       kTRBTypeToName[issuer_trb->bits.trb_type],
+       kTRBCompletionCodeToName[trb.bits.completion_code], trb.bits.trb_transfer_length,
+       trb.bits.slot_id, trb.EndpointID().Address());
   if (auto data_trb = TRBDynamicCast<DataStageTRB>(issuer_trb)) {
-    Log(level, "  ");
-    Log(level, *data_trb);
+    _Log(level, file, line, true, "  ");
+    _Log(level, file, line, true, *data_trb);
   } else if (auto setup_trb = TRBDynamicCast<SetupStageTRB>(issuer_trb)) {
-    Log(level, "  ");
-    Log(level, *setup_trb);
+    _Log(level, file, line, true, "  ");
+    _Log(level, file, line, true, *setup_trb);
   }
 }
 } // namespace
@@ -91,7 +97,7 @@ Error Device::ControlIn(EndpointID ep_id, SetupData setup_data, void *buf, int l
     return err;
   }
 
-  Log(kDebug, "Device::ControlIn: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
+  Log(kTrace, "Device::ControlIn: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
       reinterpret_cast<uintptr_t>(buf), len);
   if (ep_id.Number() < 0 || 15 < ep_id.Number()) {
     return MAKE_ERROR(Error::kInvalidEndpointNumber);
@@ -138,7 +144,7 @@ Error Device::ControlOut(EndpointID ep_id, SetupData setup_data, const void *buf
     return err;
   }
 
-  Log(kDebug, "Device::ControlOut: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
+  Log(kTrace, "Device::ControlOut: ep addr %d, buf 0x%08lx, len %d\n", ep_id.Address(),
       reinterpret_cast<uintptr_t>(buf), len);
   if (ep_id.Number() < 0 || 15 < ep_id.Number()) {
     return MAKE_ERROR(Error::kInvalidEndpointNumber);
@@ -208,7 +214,7 @@ Error Device::InterruptOut(EndpointID ep_id, void *buf, int len) {
     return err;
   }
 
-  Log(kDebug, "Device::InterrutpOut: ep addr %d, buf %08lx, len %d, dev %08lx\n", ep_id.Address(),
+  Log(kTrace, "Device::InterrutpOut: ep addr %d, buf %08lx, len %d, dev %08lx\n", ep_id.Address(),
       reinterpret_cast<uintptr_t>(buf), len, reinterpret_cast<uintptr_t>(this));
   return MAKE_ERROR(Error::kNotImplemented);
 }
@@ -218,10 +224,10 @@ Error Device::OnTransferEventReceived(const TransferEventTRB &trb) {
 
   if (trb.bits.completion_code != 1 /* Success */ &&
       trb.bits.completion_code != 13 /* Short Packet */) {
-    Log(kDebug, trb);
+    Log(kTrace, trb);
     return MAKE_ERROR(Error::kTransferFailed);
   }
-  Log(kDebug, trb);
+  Log(kTrace, trb);
 
   TRB *issuer_trb = trb.Pointer();
   if (auto normal_trb = TRBDynamicCast<NormalTRB>(issuer_trb)) {
@@ -231,10 +237,10 @@ Error Device::OnTransferEventReceived(const TransferEventTRB &trb) {
 
   auto opt_setup_stage_trb = setup_stage_map_.Get(issuer_trb);
   if (!opt_setup_stage_trb) {
-    Log(kDebug, "No Corresponding Setup Stage for issuer %s\n",
+    Log(kTrace, "No Corresponding Setup Stage for issuer %s\n",
         kTRBTypeToName[issuer_trb->bits.trb_type]);
     if (auto data_trb = TRBDynamicCast<DataStageTRB>(issuer_trb)) {
-      Log(kDebug, *data_trb);
+      Log(kTrace, *data_trb);
     }
     return MAKE_ERROR(Error::kNoCorrespondingSetupStage);
   }

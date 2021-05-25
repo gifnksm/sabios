@@ -19,6 +19,12 @@ pub(crate) fn init(framebuffer: FrameBuffer) -> Result<()> {
 
     INFO.init_once(|| info);
     DRAWER.init_once(|| Mutex::new(drawer));
+
+    info!(
+        "screen: size={}, bytes_per_pixel={}, pixel_format={:?}",
+        info.size, info.bytes_per_pixel, info.pixel_format,
+    );
+
     Ok(())
 }
 

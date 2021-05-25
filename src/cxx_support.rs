@@ -1,23 +1,41 @@
-use crate::{log::Level, prelude::*};
+use crate::log::{self, Level};
 use core::{ptr, slice, str};
 
 #[no_mangle]
-extern "C" fn sabios_log(level: i32, msg: *const u8, len: usize) -> i32 {
+extern "C" fn sabios_log(
+    level: i32,
+    file: *const u8,
+    file_len: usize,
+    line: u32,
+    msg: *const u8,
+    msg_len: usize,
+    cont_line: bool,
+) -> i32 {
     let level = match level {
         3 => Level::Error,
         4 => Level::Warn,
-        6 => Level::Info,
         7 => Level::Debug,
+        8 => Level::Trace,
         _ => Level::Info,
     };
 
     unsafe {
-        let s = slice::from_raw_parts(msg, len);
-        let s = str::from_utf8_unchecked(s);
-        log!(level, "{}", s.trim_end());
+        let msg = slice::from_raw_parts(msg, msg_len);
+        let msg = str::from_utf8_unchecked(msg);
+        let file = slice::from_raw_parts(file, file_len);
+        let file = str::from_utf8_unchecked(file);
+        let newline = msg.ends_with('\n');
+        log::_log(
+            level,
+            format_args!("{}", msg.trim_end()),
+            file,
+            line,
+            cont_line,
+            newline,
+        );
     }
 
-    len as i32
+    msg_len as i32
 }
 
 extern "C" {

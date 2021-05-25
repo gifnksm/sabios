@@ -64,7 +64,7 @@ entry_point!(kernel_main);
 
 #[allow(clippy::expect_used)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    log::set_level(log::Level::Info);
+    log::set_level(log::Level::Warn, log::Level::Debug);
 
     init(boot_info).expect("failed to initialize kernel");
 

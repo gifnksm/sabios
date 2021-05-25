@@ -84,7 +84,7 @@ void InitializeEP0Context(EndpointContext &ctx, Ring *transfer_ring, unsigned in
 
 Error ResetPort(Controller &xhc, Port &port) {
   const bool is_connected = port.IsConnected();
-  Log(kDebug, "ResetPort: port.IsConnected() = %s\n", is_connected ? "true" : "false");
+  Log(kTrace, "ResetPort: port.IsConnected() = %s\n", is_connected ? "true" : "false");
 
   if (!is_connected) {
     return MAKE_ERROR(Error::kSuccess);
@@ -107,7 +107,7 @@ Error ResetPort(Controller &xhc, Port &port) {
 Error EnableSlot(Controller &xhc, Port &port) {
   const bool is_enabled = port.IsEnabled();
   const bool reset_completed = port.IsPortResetChanged();
-  Log(kDebug, "EnableSlot: port.IsEnabled() = %s, port.IsPortResetChanged() = %s\n",
+  Log(kTrace, "EnableSlot: port.IsEnabled() = %s, port.IsPortResetChanged() = %s\n",
       is_enabled ? "true" : "false", reset_completed ? "true" : "false");
 
   if (is_enabled && reset_completed) {
@@ -123,7 +123,7 @@ Error EnableSlot(Controller &xhc, Port &port) {
 }
 
 Error AddressDevice(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
-  Log(kDebug, "AddressDevice: port_id = %d, slot_id = %d\n", port_id, slot_id);
+  Log(kTrace, "AddressDevice: port_id = %d, slot_id = %d\n", port_id, slot_id);
 
   xhc.DeviceManager()->AllocDevice(slot_id, xhc.DoorbellRegisterAt(slot_id));
 
@@ -156,7 +156,7 @@ Error AddressDevice(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
 }
 
 Error InitializeDevice(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
-  Log(kDebug, "InitializeDevice: port_id = %d, slot_id = %d\n", port_id, slot_id);
+  Log(kTrace, "InitializeDevice: port_id = %d, slot_id = %d\n", port_id, slot_id);
 
   auto dev = xhc.DeviceManager()->FindBySlot(slot_id);
   if (dev == nullptr) {
@@ -170,7 +170,7 @@ Error InitializeDevice(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
 }
 
 Error CompleteConfiguration(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
-  Log(kDebug, "CompleteConfiguration: port_id = %d, slot_id = %d\n", port_id, slot_id);
+  Log(kTrace, "CompleteConfiguration: port_id = %d, slot_id = %d\n", port_id, slot_id);
 
   auto dev = xhc.DeviceManager()->FindBySlot(slot_id);
   if (dev == nullptr) {
@@ -184,7 +184,7 @@ Error CompleteConfiguration(Controller &xhc, uint8_t port_id, uint8_t slot_id) {
 }
 
 Error OnEvent(Controller &xhc, PortStatusChangeEventTRB &trb) {
-  Log(kDebug, "PortStatusChangeEvent: port_id = %d\n", trb.bits.port_id);
+  Log(kTrace, "PortStatusChangeEvent: port_id = %d\n", trb.bits.port_id);
   auto port_id = trb.bits.port_id;
   auto port = xhc.PortAt(port_id);
 
@@ -218,7 +218,7 @@ Error OnEvent(Controller &xhc, TransferEventTRB &trb) {
 Error OnEvent(Controller &xhc, CommandCompletionEventTRB &trb) {
   const auto issuer_type = trb.Pointer()->bits.trb_type;
   const auto slot_id = trb.bits.slot_id;
-  Log(kDebug, "CommandCompletionEvent: slot_id = %d, issuer = %s\n", trb.bits.slot_id,
+  Log(kTrace, "CommandCompletionEvent: slot_id = %d, issuer = %s\n", trb.bits.slot_id,
       kTRBTypeToName[issuer_type]);
 
   if (issuer_type == EnableSlotCommandTRB::Type) {
@@ -288,13 +288,13 @@ void RequestHCOwnership(uintptr_t mmio_base, HCCPARAMS1_Bitmap hccp) {
   }
 
   r.bits.hc_os_owned_semaphore = 1;
-  Log(kDebug, "waiting until OS owns xHC...\n");
+  Log(kTrace, "waiting until OS owns xHC...\n");
   reg.Write(r);
 
   do {
     r = reg.Read();
   } while (r.bits.hc_bios_owned_semaphore || !r.bits.hc_os_owned_semaphore);
-  Log(kDebug, "OS has owned xHC\n");
+  Log(kTrace, "OS has owned xHC\n");
 }
 } // namespace
 
@@ -334,7 +334,7 @@ Error Controller::Initialize() {
   while (op_->USBSTS.Read().bits.controller_not_ready)
     ;
 
-  Log(kDebug, "MaxSlots: %u\n", cap_->HCSPARAMS1.Read().bits.max_device_slots);
+  Log(kTrace, "MaxSlots: %u\n", cap_->HCSPARAMS1.Read().bits.max_device_slots);
   // Set "Max Slots Enabled" field in CONFIG.
   auto config = op_->CONFIG.Read();
   config.bits.max_device_slots_enabled = kDeviceSize;
@@ -347,7 +347,7 @@ Error Controller::Initialize() {
     auto scratchpad_buf_arr = AllocArray<void *>(max_scratchpad_buffers, 64, 4096);
     for (int i = 0; i < max_scratchpad_buffers; ++i) {
       scratchpad_buf_arr[i] = AllocMem(4096, 4096, 4096);
-      Log(kDebug, "scratchpad buffer array %d = %p\n", i, scratchpad_buf_arr[i]);
+      Log(kTrace, "scratchpad buffer array %d = %p\n", i, scratchpad_buf_arr[i]);
     }
     devmgr_.DeviceContexts()[0] = reinterpret_cast<DeviceContext *>(scratchpad_buf_arr);
     Log(kInfo, "wrote scratchpad buffer array %p to dev ctx array 0\n", scratchpad_buf_arr);

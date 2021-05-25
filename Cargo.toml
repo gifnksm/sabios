@@ -34,3 +34,4 @@ x86_64 = "0.14.3"
 
 [package.metadata.bootloader]
 map-physical-memory = true
+

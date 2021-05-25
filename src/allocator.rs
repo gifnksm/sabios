@@ -106,7 +106,7 @@ impl FixedSizeBlockAllocator {
 
 unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let mut allocator = self.lock();
+        let mut allocator = self.spin_lock();
         match list_index(&layout) {
             Some(index) => {
                 match allocator.list_heads[index].take() {
@@ -130,7 +130,7 @@ unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let mut allocator = self.lock();
+        let mut allocator = self.spin_lock();
         match list_index(&layout) {
             Some(index) => {
                 let new_node = ListNode {

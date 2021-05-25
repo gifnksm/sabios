@@ -23,7 +23,7 @@ where
     }
 
     pub(crate) fn spin_lock(&self) -> MutexGuard<'_, T> {
-        self.lock()
+        self.0.lock()
     }
 
     #[track_caller]

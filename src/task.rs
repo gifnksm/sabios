@@ -1,7 +1,58 @@
-use crate::gdt;
-use alloc::{boxed::Box, vec, vec::Vec};
+use crate::{
+    gdt,
+    prelude::*,
+    sync::{Mutex, OnceCell},
+};
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 use core::mem;
+use crossbeam_queue::ArrayQueue;
+use custom_debug_derive::Debug as CustomDebug;
 use x86_64::registers::control::Cr3;
+
+static TASK_QUEUE: OnceCell<ArrayQueue<Arc<Task>>> = OnceCell::uninit();
+static CURRENT_TASK: OnceCell<Mutex<Arc<Task>>> = OnceCell::uninit();
+
+pub(crate) fn init() {
+    TASK_QUEUE.init_once(|| ArrayQueue::new(100));
+    CURRENT_TASK.init_once(|| Mutex::new(Arc::new(Task::new(dummy_task, 0, 0))));
+}
+
+extern "C" fn dummy_task(_arg0: u64, _arg1: u64) {
+    panic!("dummy task called;")
+}
+
+pub(crate) fn spawn(entry_point: EntryPoint, arg0: u64, arg1: u64) -> Result<()> {
+    let task = Arc::new(Task::new(entry_point, arg0, arg1));
+    TASK_QUEUE.get().push(task).map_err(|_| ErrorKind::Full)?;
+    Ok(())
+}
+
+pub(crate) fn on_interrupt() {
+    let queue = TASK_QUEUE.get();
+    let next_task = match queue.pop() {
+        Some(task) => task,
+        None => return,
+    };
+
+    unsafe {
+        let (next_task, current_task) = CURRENT_TASK.get().with_lock(|current_task_slot| {
+            let current_task_ptr = (&**current_task_slot) as *const Task;
+            let next_task_ptr = (&*next_task) as *const Task;
+
+            let current_task = mem::replace(current_task_slot, next_task);
+            #[allow(clippy::unwrap_used)]
+            queue.push(current_task).unwrap();
+
+            #[allow(clippy::unwrap_used)]
+            let next_task = next_task_ptr.as_ref().unwrap();
+            #[allow(clippy::unwrap_used)]
+            let current_task = current_task_ptr.as_ref().unwrap();
+            (next_task, current_task)
+        });
+
+        Task::switch(&next_task, &current_task)
+    }
+}
 
 #[derive(Debug)]
 #[repr(C, align(16))]
@@ -45,15 +96,18 @@ struct TaskStackElement {
 }
 static_assertions::const_assert_eq!(mem::size_of::<TaskStackElement>(), 16);
 
+#[derive(CustomDebug)]
 pub(crate) struct Task {
+    #[debug(skip)]
     ctx: Box<TaskContext>,
+    #[debug(skip)]
     stack: Vec<TaskStackElement>,
 }
 
 type EntryPoint = extern "C" fn(arg0: u64, arg1: u64);
 
 impl Task {
-    pub(crate) fn new(entry_point: EntryPoint, arg0: u64, arg1: u64) -> Self {
+    fn new(entry_point: EntryPoint, arg0: u64, arg1: u64) -> Self {
         let stack_size = 1024 * 8;
         let stack_elem_size = mem::size_of::<TaskStackElement>();
         let mut task = Self {
@@ -78,11 +132,10 @@ impl Task {
         assert!(task.ctx.rsp & 0xf == 8);
 
         task.ctx.fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
-
         task
     }
 
-    pub(crate) fn switch(next: &'static Task, current: &'static Task) {
+    fn switch(next: &'static Task, current: &'static Task) {
         switch_task(&next.ctx, &current.ctx);
     }
 }

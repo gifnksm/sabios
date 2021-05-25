@@ -24,7 +24,7 @@ pub(crate) struct Sender<T> {
 
 impl<T> Sender<T> {
     pub(crate) fn send(self, value: T) {
-        *self.inner.value.lock() = Some(value);
+        *self.inner.value.spin_lock() = Some(value);
         self.inner.waker.wake();
     }
 }

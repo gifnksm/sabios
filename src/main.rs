@@ -20,8 +20,6 @@ use self::{
     graphics::{Color, Draw, Point, Rectangle, Size},
     layer::{Layer, LayerDrawer},
     prelude::*,
-    sync::OnceCell,
-    task::Task,
     window::Window,
 };
 use alloc::format;
@@ -109,6 +107,8 @@ fn init(boot_info: &'static mut BootInfo) -> Result<()> {
     unsafe { acpi::init(&mut mapper, rsdp) }?;
     timer::lapic::init();
 
+    task::init();
+
     info!("Initialization completed");
 
     Ok(())
@@ -145,15 +145,7 @@ fn start_window() -> ! {
         }
     }));
 
-    TASK_MAIN.init_once(|| Task::new(dummy_task, 0, 0));
-    TASK_B.init_once(|| Task::new(task_b, 1, 42));
-
-    executor.spawn(CoTask::new(async {
-        loop {
-            co_task::yield_now().await;
-            Task::switch(TASK_B.get(), TASK_MAIN.get());
-        }
-    }));
+    task::spawn(task_b, 1, 42).expect("failed to spawn task");
 
     x86_64::instructions::interrupts::enable();
 
@@ -161,13 +153,6 @@ fn start_window() -> ! {
     println!("Welcome to sabios!");
 
     executor.run();
-}
-
-static TASK_MAIN: OnceCell<Task> = OnceCell::uninit();
-static TASK_B: OnceCell<Task> = OnceCell::uninit();
-
-extern "C" fn dummy_task(_arg0: u64, _arg1: u64) {
-    panic!("dummy task called;")
 }
 
 #[allow(clippy::unwrap_used)]
@@ -187,7 +172,6 @@ extern "C" fn task_b(_arg0: u64, _arg1: u64) {
     drawer.draw_sync(layer_id, &window).unwrap();
 
     for i in 0.. {
-        Task::switch(TASK_MAIN.get(), TASK_B.get());
         window.fill_rect(
             Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
             Color::from_code(0xc6c6c6),

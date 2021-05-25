@@ -4,6 +4,7 @@ pub(crate) mod lapic {
         interrupt::{self, InterruptIndex},
         prelude::*,
         sync::{mpsc, oneshot, OnceCell},
+        task,
     };
     use alloc::collections::BinaryHeap;
     use core::{
@@ -177,6 +178,7 @@ pub(crate) mod lapic {
     }
 
     static INTERRUPTED_COUNT: AtomicU64 = AtomicU64::new(0);
+    static TOTAL_INTERRUPTED_COUNT: AtomicU64 = AtomicU64::new(0);
     static WAKER: AtomicWaker = AtomicWaker::new();
     static TIMER_TX: OnceCell<mpsc::Sender<Timer>> = OnceCell::uninit();
 
@@ -214,8 +216,13 @@ pub(crate) mod lapic {
 
     pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
         INTERRUPTED_COUNT.fetch_add(1, Ordering::Relaxed);
+        let current_count = TOTAL_INTERRUPTED_COUNT.fetch_add(1, Ordering::Relaxed);
         WAKER.wake();
         interrupt::notify_end_of_interrupt();
+
+        if current_count % 2 == 0 {
+            task::on_interrupt();
+        }
     }
 
     pub(crate) fn handler_task() -> impl Future<Output = ()> {

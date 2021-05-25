@@ -4,3 +4,4 @@ runner = "cargo run --package boot --"
 [alias]
 kbuild = "build --target x86_64-sabios.json -Z build-std=core,alloc"
 krun = "run --target x86_64-sabios.json -Z build-std=core,alloc"
+ktest = "test --target x86_64-sabios.json -Z build-std=core,alloc"

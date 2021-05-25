@@ -35,6 +35,7 @@ macro_rules! log {
     ($level:expr, $($arg:tt)*) => {
         if $crate::log::check_level($level) {
             $crate::println!("[{}] {}", $level, format_args!($($arg)*));
+            $crate::serial_println!("[{}] {}", $level, format_args!($($arg)*));
         }
     }
 }

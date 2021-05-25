@@ -147,6 +147,7 @@ pub(crate) unsafe fn init(mapper: &mut OffsetPageTable, rsdp: VirtAddr) -> Resul
         bail!(ErrorKind::InvalidXsdt);
     }
 
+    #[allow(clippy::unwrap_used)]
     let fadt = xsdt
         .entries()
         .filter_map(|entry| {

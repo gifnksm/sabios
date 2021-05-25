@@ -3,12 +3,15 @@ use locate_cargo_manifest::locate_manifest;
 use std::{
     env,
     path::{Path, PathBuf},
-    process::{self, Command},
+    process::{self, Command, ExitStatus},
+    time::Duration,
 };
 
 const RUN_ARGS: &[&str] = &[
     "-m",
     "1G",
+    "-serial",
+    "stdio",
     "-device",
     "nec-usb-xhci,id=xhci",
     "-device",
@@ -19,7 +22,26 @@ const RUN_ARGS: &[&str] = &[
     "tcp::1234",
     "-no-reboot",
 ];
-
+const TEST_ARGS: &[&str] = &[
+    "-m",
+    "1G",
+    "-serial",
+    "stdio",
+    "-device",
+    "nec-usb-xhci,id=xhci",
+    "-device",
+    "usb-mouse",
+    "-device",
+    "usb-kbd",
+    "-gdb",
+    "tcp::1234",
+    "-device",
+    "isa-debug-exit,iobase=0xf4,iosize=0x04",
+    "-display",
+    "none",
+    "-no-reboot",
+];
+const TEST_TIMEOUT_SECS: u64 = 30;
 const OVMF_PATH: &str = "/usr/share/OVMF/x64/OVMF.fd";
 
 fn main() {
@@ -29,22 +51,9 @@ fn main() {
         let path = PathBuf::from(args.next().unwrap());
         path.canonicalize().unwrap()
     };
-    let no_boot = if let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--no-run" => true,
-            other => panic!("unexpected argument `{}`", other),
-        }
-    } else {
-        false
-    };
 
     println!("use kernel executable: {}", kernel_binary_path.display());
     let image = create_disk_image(&kernel_binary_path);
-
-    if no_boot {
-        println!("Created disk image at `{}`", image.display());
-        return;
-    }
 
     let mut run_cmd = Command::new("qemu-system-x86_64");
     run_cmd
@@ -52,12 +61,27 @@ fn main() {
         .arg(format!("format=raw,file={}", image.display()))
         .arg("-bios")
         .arg(OVMF_PATH);
-    run_cmd.args(RUN_ARGS);
 
-    let exit_status = run_cmd.status().unwrap();
-    if !exit_status.success() {
-        process::exit(exit_status.code().unwrap_or(1));
+    let binary_kind = runner_utils::binary_kind(&kernel_binary_path);
+    if binary_kind.is_test() {
+        run_cmd.args(TEST_ARGS);
+
+        let exit_status = run_test_command(run_cmd);
+        match exit_status.code() {
+            Some(33) => {} // success
+            other => panic!("Test failed (exit code: {:?})", other),
+        }
+    } else {
+        run_cmd.args(RUN_ARGS);
+        let exit_status = run_cmd.status().unwrap();
+        if !exit_status.success() {
+            process::exit(exit_status.code().unwrap_or(1));
+        }
     }
+}
+
+fn run_test_command(mut cmd: Command) -> ExitStatus {
+    runner_utils::run_with_timeout(&mut cmd, Duration::from_secs(TEST_TIMEOUT_SECS)).unwrap()
 }
 
 fn create_disk_image(kernel_binary_path: &Path) -> PathBuf {

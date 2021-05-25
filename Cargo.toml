@@ -18,7 +18,7 @@ panic = "abort"
 [dependencies]
 arrayvec = { version = "0.7.0", default-features = false }
 bit_field = "0.10.1"
-bootloader = { version = "0.10.5", git = "https://github.com/gifnksm/bootloader", branch = "force-acpi-v2-rsdp" }
+bootloader = "0.10.5"
 conquer-once = { version = "0.3.2", default-features = false }
 crossbeam-queue = { version = "0.3.1", default-features = false, features = ["alloc"] }
 custom_debug_derive = "0.5.0"
@@ -30,7 +30,7 @@ num-traits = { version = "0.2.14", default-features = false }
 spin = "0.9.0"
 static_assertions = "1.1.0"
 volatile = "0.4.4"
-x86_64 = "0.14.2"
+x86_64 = "0.14.3"
 
 [package.metadata.bootloader]
 map-physical-memory = true

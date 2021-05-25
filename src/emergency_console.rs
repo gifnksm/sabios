@@ -2,6 +2,7 @@ use crate::{
     font,
     framebuffer::{self, Drawer, ScreenInfo},
     graphics::{Color, Draw, Point, Rectangle},
+    serial_print,
 };
 use core::fmt;
 
@@ -27,6 +28,8 @@ pub(crate) struct EmergencyConsole<'a> {
 
 impl fmt::Write for EmergencyConsole<'_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
+        serial_print!("{}", s);
+
         for ch in s.chars() {
             if ch != '\n' {
                 self.drawer.fill_rect(

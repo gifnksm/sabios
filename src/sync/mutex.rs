@@ -22,6 +22,10 @@ where
         self.try_lock().unwrap()
     }
 
+    pub(crate) fn spin_lock(&self) -> MutexGuard<'_, T> {
+        self.lock()
+    }
+
     #[track_caller]
     pub(crate) fn try_lock(&self) -> Result<MutexGuard<'_, T>> {
         Ok(self.0.try_lock().ok_or(ErrorKind::Deadlock)?)

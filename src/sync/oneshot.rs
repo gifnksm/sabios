@@ -34,6 +34,16 @@ pub(crate) struct Receiver<T> {
     inner: Arc<Inner<T>>,
 }
 
+impl<T> Receiver<T> {
+    pub(crate) fn spin_recv(self) -> T {
+        loop {
+            if let Some(value) = self.inner.value.spin_lock().take() {
+                return value;
+            }
+        }
+    }
+}
+
 impl<T> Future for Receiver<T> {
     type Output = T;
 

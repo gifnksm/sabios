@@ -359,6 +359,23 @@ impl LayerDrawer {
         })?;
         Ok(())
     }
+
+    pub(crate) fn draw_sync(&mut self, layer_id: LayerId, window: &Window) -> Result<()> {
+        let buffer = if let Some(rx) = self.buffer_rx.take() {
+            rx.spin_recv()
+        } else {
+            None
+        };
+        let buffer = window.clone_buffer(buffer);
+        let (tx, rx) = oneshot::channel();
+        self.buffer_rx = Some(rx);
+        self.sender.send(LayerEvent::DrawLayer {
+            layer_id,
+            buffer,
+            tx,
+        })?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

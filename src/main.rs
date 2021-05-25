@@ -17,10 +17,14 @@ extern crate alloc;
 
 use self::{
     co_task::{CoTask, Executor},
+    graphics::{Color, Draw, Point, Rectangle, Size},
+    layer::{Layer, LayerDrawer},
     prelude::*,
     sync::OnceCell,
     task::Task,
+    window::Window,
 };
+use alloc::format;
 use bootloader::{
     boot_info::{FrameBuffer, Optional},
     entry_point, BootInfo,
@@ -145,8 +149,7 @@ fn start_window() -> ! {
     TASK_B.init_once(|| Task::new(task_b, 1, 42));
 
     executor.spawn(CoTask::new(async {
-        for i in 0.. {
-            println!("Hello from taskA {}", i);
+        loop {
             co_task::yield_now().await;
             Task::switch(TASK_B.get(), TASK_MAIN.get());
         }
@@ -167,10 +170,31 @@ extern "C" fn dummy_task(_arg0: u64, _arg1: u64) {
     panic!("dummy task called;")
 }
 
+#[allow(clippy::unwrap_used)]
 extern "C" fn task_b(_arg0: u64, _arg1: u64) {
+    let mut window = Window::new(Size::new(160, 52)).unwrap();
+    window::draw_window(&mut window, "TaskB Window");
+
+    let mut layer = Layer::new();
+    let layer_id = layer.id();
+    layer.set_draggable(true);
+    layer.move_to(Point::new(100, 100));
+
+    let tx = layer::event_tx();
+    let mut drawer = LayerDrawer::new();
+    tx.register(layer).unwrap();
+    tx.set_height(layer_id, usize::MAX).unwrap();
+    drawer.draw_sync(layer_id, &window).unwrap();
+
     for i in 0.. {
-        println!("Hello from taskB {}", i);
         Task::switch(TASK_MAIN.get(), TASK_B.get());
+        window.fill_rect(
+            Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
+            Color::from_code(0xc6c6c6),
+        );
+        let s = format!("{:010}", i);
+        font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
+        drawer.draw_sync(layer_id, &window).unwrap();
     }
 }
 

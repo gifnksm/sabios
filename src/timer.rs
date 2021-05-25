@@ -19,16 +19,28 @@ pub(crate) mod lapic {
     const COUNT_MAX: u32 = u32::MAX;
 
     fn lvt_timer() -> Volatile<&'static mut u32> {
-        unsafe { Volatile::new((0xfee00320u64 as *mut u32).as_mut().unwrap()) }
+        #[allow(clippy::unwrap_used)]
+        unsafe {
+            Volatile::new((0xfee00320u64 as *mut u32).as_mut().unwrap())
+        }
     }
     fn initial_count() -> Volatile<&'static mut u32> {
-        unsafe { Volatile::new((0xfee00380u64 as *mut u32).as_mut().unwrap()) }
+        #[allow(clippy::unwrap_used)]
+        unsafe {
+            Volatile::new((0xfee00380u64 as *mut u32).as_mut().unwrap())
+        }
     }
     fn current_count() -> Volatile<&'static mut u32> {
-        unsafe { Volatile::new((0xfee00390u64 as *mut u32).as_mut().unwrap()) }
+        #[allow(clippy::unwrap_used)]
+        unsafe {
+            Volatile::new((0xfee00390u64 as *mut u32).as_mut().unwrap())
+        }
     }
     fn divide_config() -> Volatile<&'static mut u32> {
-        unsafe { Volatile::new((0xfee003e0u64 as *mut u32).as_mut().unwrap()) }
+        #[allow(clippy::unwrap_used)]
+        unsafe {
+            Volatile::new((0xfee003e0u64 as *mut u32).as_mut().unwrap())
+        }
     }
 
     pub(crate) fn init() {
@@ -157,6 +169,7 @@ pub(crate) mod lapic {
                 if timer.timeout > self.tick {
                     break;
                 }
+                #[allow(clippy::unwrap_used)]
                 let timer = self.timers.pop().unwrap();
                 timer.tx.send(timer.timeout);
             }

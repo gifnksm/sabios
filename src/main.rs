@@ -269,7 +269,8 @@ fn exit_qemu(exit_code: QemuExitCode) -> ! {
 #[cfg(test)]
 mod tests {
     #[test_case]
+    #[allow(clippy::assertions_on_constants)]
     fn trivial_assertion() {
-        assert_eq!(1, 1);
+        assert!(true);
     }
 }

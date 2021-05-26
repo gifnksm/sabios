@@ -59,6 +59,7 @@ mod sync;
 mod task;
 mod text_window;
 mod timer;
+mod triple_buffer;
 mod window;
 mod xhc;
 
@@ -272,13 +273,4 @@ fn exit_qemu(exit_code: QemuExitCode) -> ! {
     }
 
     hlt_loop();
-}
-
-#[cfg(test)]
-mod tests {
-    #[test_case]
-    #[allow(clippy::assertions_on_constants)]
-    fn trivial_assertion() {
-        assert!(true);
-    }
 }

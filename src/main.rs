@@ -28,6 +28,7 @@ use bootloader::{
 };
 use core::{mem, panic::PanicInfo};
 use futures_util::StreamExt;
+use task::TaskId;
 use x86_64::VirtAddr;
 
 mod acpi;
@@ -146,7 +147,9 @@ fn start_window() -> ! {
         }
     }));
 
-    task::spawn(task_b, 1, 42).expect("failed to spawn task");
+    task::spawn(task_b, 1).expect("failed to spawn task");
+    task::spawn(task::idle_task, 0xdeadbeef).expect("failed to spawn task");
+    task::spawn(task::idle_task, 0xcafebabe).expect("failed to spawn task");
 
     x86_64::instructions::interrupts::enable();
 
@@ -157,7 +160,7 @@ fn start_window() -> ! {
 }
 
 #[allow(clippy::unwrap_used)]
-extern "C" fn task_b(_arg0: u64, _arg1: u64) {
+extern "C" fn task_b(_task_id: TaskId, _arg: u64) {
     let mut window = Window::builder()
         .pos(Point::new(100, 100))
         .size(Size::new(160, 52))

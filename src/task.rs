@@ -4,7 +4,10 @@ use crate::{
     sync::{Mutex, OnceCell},
 };
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
-use core::mem;
+use core::{
+    fmt, mem,
+    sync::atomic::{AtomicU64, Ordering},
+};
 use crossbeam_queue::ArrayQueue;
 use custom_debug_derive::Debug as CustomDebug;
 use x86_64::registers::control::Cr3;
@@ -14,15 +17,20 @@ static CURRENT_TASK: OnceCell<Mutex<Arc<Task>>> = OnceCell::uninit();
 
 pub(crate) fn init() {
     TASK_QUEUE.init_once(|| ArrayQueue::new(100));
-    CURRENT_TASK.init_once(|| Mutex::new(Arc::new(Task::new(dummy_task, 0, 0))));
+    CURRENT_TASK.init_once(|| Mutex::new(Arc::new(Task::new(dummy_task, 0))));
 }
 
-extern "C" fn dummy_task(_arg0: u64, _arg1: u64) {
+extern "C" fn dummy_task(_task_id: TaskId, _arg: u64) {
     panic!("dummy task called;")
 }
 
-pub(crate) fn spawn(entry_point: EntryPoint, arg0: u64, arg1: u64) -> Result<()> {
-    let task = Arc::new(Task::new(entry_point, arg0, arg1));
+pub(crate) extern "C" fn idle_task(task_id: TaskId, arg: u64) {
+    crate::println!("idle task: task_id={}, data={:x}", task_id, arg);
+    crate::hlt_loop();
+}
+
+pub(crate) fn spawn(entry_point: EntryPoint, arg: u64) -> Result<()> {
+    let task = Arc::new(Task::new(entry_point, arg));
     TASK_QUEUE.get().push(task).map_err(|_| ErrorKind::Full)?;
     Ok(())
 }
@@ -51,6 +59,23 @@ pub(crate) fn on_interrupt() {
         });
 
         Task::switch(&next_task, &current_task)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub(crate) struct TaskId(u64);
+
+impl TaskId {
+    fn new() -> Self {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+        Self(NEXT_ID.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+impl fmt::Display for TaskId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -98,19 +123,22 @@ static_assertions::const_assert_eq!(mem::size_of::<TaskStackElement>(), 16);
 
 #[derive(CustomDebug)]
 pub(crate) struct Task {
+    task_id: TaskId,
     #[debug(skip)]
     ctx: Box<TaskContext>,
     #[debug(skip)]
     stack: Vec<TaskStackElement>,
 }
 
-type EntryPoint = extern "C" fn(arg0: u64, arg1: u64);
+pub(crate) type EntryPoint = extern "C" fn(arg: TaskId, arg: u64);
 
 impl Task {
-    fn new(entry_point: EntryPoint, arg0: u64, arg1: u64) -> Self {
+    fn new(entry_point: EntryPoint, arg: u64) -> Self {
+        let task_id = TaskId::new();
         let stack_size = 1024 * 8;
         let stack_elem_size = mem::size_of::<TaskStackElement>();
         let mut task = Self {
+            task_id,
             ctx: Box::new(unsafe { mem::zeroed() }),
             stack: vec![
                 TaskStackElement::default();
@@ -121,8 +149,8 @@ impl Task {
         let selectors = gdt::selectors();
 
         task.ctx.rip = entry_point as *const u8 as u64;
-        task.ctx.rdi = arg0;
-        task.ctx.rsi = arg1;
+        task.ctx.rdi = task_id.0;
+        task.ctx.rsi = arg;
 
         task.ctx.cr3 = Cr3::read().0.start_address().as_u64();
         task.ctx.rflags = 0x202;

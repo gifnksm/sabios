@@ -1,7 +1,7 @@
 use crate::{
     desktop, font, framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, Layer, LayerDrawer},
+    layer,
     prelude::*,
     sync::{mpsc, Mutex, MutexGuard},
     window::Window,
@@ -276,7 +276,11 @@ pub(crate) struct ConsoleInitParam {
 pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
     let font_size = font::FONT_PIXEL_SIZE;
     let window_size = Size::new(COLUMNS as i32 * font_size.x, ROWS as i32 * font_size.y);
-    let window = Arc::new(Mutex::new(Window::new(window_size)?));
+    let window = Window::builder()
+        .size(window_size)
+        .height(layer::CONSOLE_HEIGHT)
+        .build()?;
+    let window = Arc::new(Mutex::new(window));
     let (tx, rx) = mpsc::channel(100);
     {
         interrupts::without_interrupts(|| {
@@ -284,6 +288,7 @@ pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
             Ok::<(), Error>(())
         })?;
     }
+    window.lock().flush()?;
     Ok(ConsoleInitParam { window, rx })
 }
 
@@ -291,18 +296,8 @@ pub(crate) async fn handler_task(param: ConsoleInitParam) {
     let res = async {
         let ConsoleInitParam { window, mut rx } = param;
 
-        let mut layer = Layer::new();
-        let layer_id = layer.id();
-        layer.move_to(Point::new(0, 0));
-
-        let layer_tx = layer::event_tx();
-        let mut drawer = LayerDrawer::new();
-        layer_tx.register(layer)?;
-        layer_tx.set_height(layer_id, layer::CONSOLE_HEIGHT)?;
-        drawer.draw_shared(layer_id, &*window).await?;
-
         while let Some(()) = rx.next().await {
-            drawer.draw_shared(layer_id, &*window).await?;
+            window.lock().flush()?;
         }
 
         Ok::<(), Error>(())

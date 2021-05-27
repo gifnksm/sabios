@@ -43,8 +43,13 @@ impl<T> Producer<T> {
             .load(Ordering::Relaxed)
     }
 
+    #[cfg(test)]
     pub(crate) fn buffer(&self) -> MutexGuard<T> {
         self.inner.buffers[self.in_progress].buffer()
+    }
+
+    pub(crate) fn with_buffer<U>(&self, f: impl FnOnce(&mut T) -> U) -> U {
+        self.inner.buffers[self.in_progress].with_buffer(f)
     }
 
     pub(crate) fn store(&mut self) {
@@ -144,6 +149,10 @@ impl<T> Buffer<T> {
 
     fn buffer(&self) -> MutexGuard<T> {
         self.value.lock()
+    }
+
+    fn with_buffer<U>(&self, f: impl FnOnce(&mut T) -> U) -> U {
+        self.value.with_lock(f)
     }
 }
 

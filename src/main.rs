@@ -18,7 +18,6 @@ extern crate alloc;
 use self::{
     co_task::{CoTask, Executor},
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{Layer, LayerDrawer},
     prelude::*,
     window::Window,
 };
@@ -117,6 +116,7 @@ fn init(boot_info: &'static mut BootInfo) -> Result<()> {
 
 #[allow(clippy::expect_used)]
 fn start_window() -> ! {
+    let layer_task = layer::handler_task();
     let console_param = console::start_window_mode().expect("failed to start console window mode");
 
     // Initialize executor & co-tasks
@@ -129,7 +129,7 @@ fn start_window() -> ! {
     executor.spawn(CoTask::new(console::handler_task(console_param)));
     executor.spawn(CoTask::new(main_window::handler_task()));
     executor.spawn(CoTask::new(text_window::handler_task()));
-    executor.spawn(CoTask::new(layer::handler_task()));
+    executor.spawn(CoTask::new(layer_task));
 
     executor.spawn(CoTask::new(async {
         #[allow(clippy::unwrap_used)]
@@ -158,19 +158,15 @@ fn start_window() -> ! {
 
 #[allow(clippy::unwrap_used)]
 extern "C" fn task_b(_arg0: u64, _arg1: u64) {
-    let mut window = Window::new(Size::new(160, 52)).unwrap();
+    let mut window = Window::builder()
+        .pos(Point::new(100, 100))
+        .size(Size::new(160, 52))
+        .draggable(true)
+        .height(usize::MAX)
+        .build()
+        .unwrap();
     window::draw_window(&mut window, "TaskB Window");
-
-    let mut layer = Layer::new();
-    let layer_id = layer.id();
-    layer.set_draggable(true);
-    layer.move_to(Point::new(100, 100));
-
-    let tx = layer::event_tx();
-    let mut drawer = LayerDrawer::new();
-    tx.register(layer).unwrap();
-    tx.set_height(layer_id, usize::MAX).unwrap();
-    drawer.draw_sync(layer_id, &window).unwrap();
+    window.flush().unwrap();
 
     for i in 0.. {
         window.fill_rect(
@@ -179,7 +175,7 @@ extern "C" fn task_b(_arg0: u64, _arg1: u64) {
         );
         let s = format!("{:010}", i);
         font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
-        drawer.draw_sync(layer_id, &window).unwrap();
+        window.flush().unwrap();
     }
 }
 

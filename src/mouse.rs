@@ -1,7 +1,7 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Offset, Point},
-    layer::{self, Layer, LayerDrawer},
+    layer,
     prelude::*,
     sync::{mpsc, OnceCell},
     window::Window,
@@ -103,22 +103,21 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let mut window = Window::new(MOUSE_CURSOR_SIZE)?;
-            window.set_transparent_color(Some(TRANSPARENT_COLOR));
-            draw(&mut window);
-
             let mut cursor_pos = Point::new(300, 200);
             let screen_info = *framebuffer::info();
 
-            let mut layer = Layer::new();
-            let layer_id = layer.id();
-            layer.move_to(cursor_pos);
+            let mut window = Window::builder()
+                .pos(cursor_pos)
+                .size(MOUSE_CURSOR_SIZE)
+                .transparent_color(Some(TRANSPARENT_COLOR))
+                .height(layer::MOUSE_CURSOR_HEIGHT)
+                .build()?;
+
+            let cursor_layer_id = window.layer_id();
+            draw(&mut window);
+            window.flush()?;
 
             let tx = layer::event_tx();
-            let mut drawer = LayerDrawer::new();
-            tx.register(layer)?;
-            tx.set_height(layer_id, layer::MOUSE_CURSOR_HEIGHT)?;
-            drawer.draw(layer_id, &window).await?;
 
             let mut buttons = BitFlags::empty();
             while let Some(event) = rx.next().await {
@@ -135,10 +134,10 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 let pos_diff = cursor_pos - prev_cursor_pos;
 
                 if prev_cursor_pos != cursor_pos {
-                    tx.move_to(layer_id, cursor_pos)?;
+                    window.move_to(cursor_pos)?;
                 }
                 tx.mouse_event(
-                    layer_id,
+                    cursor_layer_id,
                     MouseEvent {
                         down,
                         up,

@@ -24,7 +24,7 @@ pub(crate) struct Sender<T> {
 
 impl<T> Sender<T> {
     pub(crate) fn send(self, value: T) {
-        *self.inner.value.spin_lock() = Some(value);
+        *self.inner.value.lock() = Some(value);
         self.inner.waker.wake();
     }
 }
@@ -32,16 +32,6 @@ impl<T> Sender<T> {
 #[derive(Debug)]
 pub(crate) struct Receiver<T> {
     inner: Arc<Inner<T>>,
-}
-
-impl<T> Receiver<T> {
-    pub(crate) fn spin_recv(self) -> T {
-        loop {
-            if let Some(value) = self.inner.value.spin_lock().take() {
-                return value;
-            }
-        }
-    }
 }
 
 impl<T> Future for Receiver<T> {

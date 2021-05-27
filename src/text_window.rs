@@ -2,7 +2,6 @@ use crate::{
     font,
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     keyboard::KeyboardEvent,
-    layer::{self, Layer, LayerDrawer},
     prelude::*,
     sync::{mpsc, OnceCell},
     timer,
@@ -25,7 +24,12 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     async move {
         let res = async {
             let window_size = Size::new(160, 52);
-            let mut window = Window::new(window_size)?;
+            let mut window = Window::builder()
+                .size(window_size)
+                .pos(Point::new(350, 200))
+                .draggable(true)
+                .height(usize::MAX)
+                .build()?;
 
             window::draw_window(&mut window, "Text Box Test");
             window::draw_text_box(
@@ -35,17 +39,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                     Size::new(window_size.x - 8, window_size.y - 24 - 4),
                 ),
             );
-
-            let mut layer = Layer::new();
-            let layer_id = layer.id();
-            layer.set_draggable(true);
-            layer.move_to(Point::new(350, 200));
-
-            let tx = layer::event_tx();
-            let mut drawer = LayerDrawer::new();
-            tx.register(layer)?;
-            tx.set_height(layer_id, usize::MAX)?;
-            drawer.draw(layer_id, &window).await?;
+            window.flush()?;
 
             let mut index = 0;
             let max_chars = (window_size.x - 16) / 8;
@@ -90,7 +84,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                             draw_cursor(&mut window, index, cursor_visible);
                     }
                 }
-                drawer.draw(layer_id, &window).await?;
+                window.flush()?;
             }
 
             Ok::<(), Error>(())

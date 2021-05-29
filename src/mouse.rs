@@ -115,7 +115,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
             let cursor_layer_id = window.layer_id();
             draw(&mut window);
-            window.flush()?;
+            window.flush().await?;
 
             let tx = layer::event_tx();
 

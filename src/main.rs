@@ -124,16 +124,16 @@ fn start_window() -> ! {
     let layer_task = layer::handler_task();
     let console_param = console::start_window_mode().expect("failed to start console window mode");
 
+    let task_id = task::current().id();
+
     // Initialize executor & co-tasks
-    let mut executor = Executor::new();
+    let mut executor = Executor::new(task_id);
     executor.spawn(CoTask::new(xhc::handler_task()));
     executor.spawn(CoTask::new(timer::lapic::handler_task()));
     executor.spawn(CoTask::new(mouse::handler_task()));
     executor.spawn(CoTask::new(keyboard::handler_task()));
     executor.spawn(CoTask::new(desktop::handler_task()));
     executor.spawn(CoTask::new(console::handler_task(console_param)));
-    executor.spawn(CoTask::new(main_window::handler_task()));
-    executor.spawn(CoTask::new(text_window::handler_task()));
     executor.spawn(CoTask::new(layer_task));
 
     executor.spawn(CoTask::new(async {
@@ -151,19 +151,19 @@ fn start_window() -> ! {
         }
     }));
 
-    let task_b_id = task::spawn(Task::new(task_b())).expect("failed to spawn task");
+    task::spawn(Task::new(main_window::handler_task()));
+    task::spawn(Task::new(text_window::handler_task()));
+    let task_b_id = task::spawn(Task::new(task_b()));
     task::spawn(Task::new(async {
         let task = interrupts::without_interrupts(task::current);
         println!("idle task: task_id={}, data=deadbeef", task.id());
         hlt_loop();
-    }))
-    .expect("failed to spawn task");
+    }));
     task::spawn(Task::new(async {
         let task = interrupts::without_interrupts(task::current);
         println!("idle task: task_id={}, data=cafebabe", task.id());
         hlt_loop();
-    }))
-    .expect("failed to spawn task");
+    }));
 
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);
@@ -201,7 +201,7 @@ async fn task_b() {
             .height(usize::MAX)
             .build()?;
         window::draw_window(&mut window, "TaskB Window");
-        window.flush()?;
+        window.flush().await?;
 
         for i in 0.. {
             window.fill_rect(
@@ -210,7 +210,7 @@ async fn task_b() {
             );
             let s = format!("{:010}", i);
             font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
-            window.flush()?;
+            window.flush().await?;
         }
 
         Ok::<(), Error>(())

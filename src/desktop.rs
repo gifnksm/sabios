@@ -37,7 +37,7 @@ pub(crate) async fn handler_task() {
             .build()?;
 
         draw(&mut window, screen_info.size);
-        window.flush()?;
+        window.flush().await?;
 
         Ok::<(), Error>(())
     }

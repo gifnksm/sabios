@@ -39,7 +39,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                     Size::new(window_size.x - 8, window_size.y - 24 - 4),
                 ),
             );
-            window.flush()?;
+            window.flush().await?;
 
             let mut index = 0;
             let max_chars = (window_size.x - 16) / 8;
@@ -84,7 +84,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                             draw_cursor(&mut window, index, cursor_visible);
                     }
                 }
-                window.flush()?;
+                window.flush().await?;
             }
 
             Ok::<(), Error>(())

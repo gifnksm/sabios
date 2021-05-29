@@ -1,7 +1,9 @@
 use super::{CoTask, CoTaskId};
+use crate::task::{self, TaskId};
 use alloc::{collections::BTreeMap, sync::Arc, task::Wake};
 use core::task::{Context, Poll, Waker};
 use crossbeam_queue::ArrayQueue;
+use x86_64::instructions::interrupts;
 
 #[derive(Debug)]
 enum Event {
@@ -11,14 +13,16 @@ enum Event {
 
 #[derive(Debug)]
 pub(crate) struct Executor {
+    task_id: TaskId,
     tasks: BTreeMap<CoTaskId, CoTask>,
     task_queue: Arc<ArrayQueue<Event>>,
     waker_cache: BTreeMap<CoTaskId, Waker>,
 }
 
 impl Executor {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(task_id: TaskId) -> Self {
         Self {
+            task_id,
             tasks: BTreeMap::new(),
             task_queue: Arc::new(ArrayQueue::new(100)),
             waker_cache: BTreeMap::new(),
@@ -49,27 +53,28 @@ impl Executor {
         }
     }
 
-    fn wake(&mut self, task_id: CoTaskId) {
+    fn wake(&mut self, co_task_id: CoTaskId) {
         // destructure `self` to avoid borrow checker errors
         let Self {
+            task_id,
             tasks,
             task_queue,
             waker_cache,
         } = self;
 
-        let task = match tasks.get_mut(&task_id) {
+        let task = match tasks.get_mut(&co_task_id) {
             Some(task) => task,
             None => return, // task no longer exists
         };
 
         let waker = waker_cache
-            .entry(task_id)
-            .or_insert_with(|| CoTaskWaker::waker(task_id, task_queue.clone()));
+            .entry(co_task_id)
+            .or_insert_with(|| CoTaskWaker::waker(*task_id, co_task_id, task_queue.clone()));
         let mut context = Context::from_waker(waker);
         if let Poll::Ready(()) = task.poll(&mut context) {
             // task done -> remove it and its cached waker
-            tasks.remove(&task_id);
-            waker_cache.remove(&task_id);
+            tasks.remove(&co_task_id);
+            waker_cache.remove(&co_task_id);
         }
     }
 
@@ -83,11 +88,9 @@ impl Executor {
     }
 
     fn sleep_if_idle(&self) {
-        use x86_64::instructions::interrupts::{self, enable_and_hlt};
-
         interrupts::disable();
         if self.task_queue.is_empty() {
-            enable_and_hlt();
+            task::sleep(self.task_id);
         } else {
             interrupts::enable();
         }
@@ -95,23 +98,28 @@ impl Executor {
 }
 
 struct CoTaskWaker {
-    task_id: CoTaskId,
+    task_id: TaskId,
+    co_task_id: CoTaskId,
     task_queue: Arc<ArrayQueue<Event>>,
 }
 
 impl CoTaskWaker {
-    fn waker(task_id: CoTaskId, task_queue: Arc<ArrayQueue<Event>>) -> Waker {
+    fn waker(task_id: TaskId, co_task_id: CoTaskId, task_queue: Arc<ArrayQueue<Event>>) -> Waker {
         Waker::from(Arc::new(CoTaskWaker {
             task_id,
+            co_task_id,
             task_queue,
         }))
     }
 
     fn wake_task(&self) {
-        #[allow(clippy::expect_used)]
-        self.task_queue
-            .push(Event::Wake(self.task_id))
-            .expect("task_queue full")
+        interrupts::without_interrupts(|| {
+            #[allow(clippy::expect_used)]
+            self.task_queue
+                .push(Event::Wake(self.co_task_id))
+                .expect("task_queue full");
+            task::wake(self.task_id);
+        })
     }
 }
 

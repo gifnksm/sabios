@@ -42,7 +42,7 @@ extern "C" fn task_entry_point(arg: *mut EntryPointArg) {
     executor.run();
 }
 
-pub(crate) fn spawn(task: Task) -> Result<TaskId> {
+pub(crate) fn spawn(task: Task) -> TaskId {
     assert!(!interrupts::are_enabled());
 
     let task = Arc::new(task);
@@ -53,7 +53,7 @@ pub(crate) fn spawn(task: Task) -> Result<TaskId> {
         task_manager.wake(task_id);
     });
 
-    Ok(task_id)
+    task_id
 }
 
 pub(crate) fn wake(task_id: TaskId) {
@@ -271,7 +271,7 @@ impl Task {
             vec![TaskStackElement::default(); (stack_size + stack_elem_size - 1) / stack_elem_size]
                 .into_boxed_slice();
 
-        let mut executor = Executor::new();
+        let mut executor = Executor::new(id);
         executor.spawn(CoTask::new(future));
         let arg = Box::new(EntryPointArg { executor });
 

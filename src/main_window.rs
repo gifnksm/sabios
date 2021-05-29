@@ -15,7 +15,7 @@ pub(crate) async fn handler_task() {
             .height(layer::MAIN_WINDOW_ID)
             .build()?;
         window::draw_window(&mut window, "Hello Window");
-        window.flush()?;
+        window.flush().await?;
 
         for count in 0.. {
             window.fill_rect(
@@ -24,7 +24,7 @@ pub(crate) async fn handler_task() {
             );
             let s = format!("{:010}", count);
             font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
-            window.flush()?;
+            window.flush().await?;
             co_task::yield_now().await;
         }
 

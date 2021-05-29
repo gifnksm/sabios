@@ -4,7 +4,7 @@ use crate::{
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     mouse::{MouseButton, MouseEvent},
     prelude::*,
-    sync::{mpsc, MutexGuard, OnceCell},
+    sync::{mpsc, oneshot, MutexGuard, OnceCell},
     triple_buffer::Consumer,
 };
 use alloc::{collections::BTreeMap, vec, vec::Vec};
@@ -278,6 +278,7 @@ enum LayerEvent {
     },
     DrawLayer {
         layer_id: LayerId,
+        tx: oneshot::Sender<()>,
     },
     MoveTo {
         layer_id: LayerId,
@@ -319,8 +320,10 @@ impl EventSender {
         self.send(LayerEvent::Register { layer })
     }
 
-    pub(crate) fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
-        self.send(LayerEvent::DrawLayer { layer_id })
+    pub(crate) async fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.send(LayerEvent::DrawLayer { layer_id, tx })?;
+        Ok(rx.await)
     }
 
     pub(crate) fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
@@ -345,7 +348,7 @@ impl EventSender {
 
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
     // Initialize LAYER_EVENT_TX before co-task starts
-    let (tx, mut rx) = mpsc::channel(10000);
+    let (tx, mut rx) = mpsc::channel(100);
     LAYER_EVENT_TX.init_once(|| tx);
 
     async move {
@@ -356,7 +359,10 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             while let Some(event) = rx.next().await {
                 match event {
                     LayerEvent::Register { layer } => lm.register(layer),
-                    LayerEvent::DrawLayer { layer_id } => lm.draw_layer(layer_id),
+                    LayerEvent::DrawLayer { layer_id, tx } => {
+                        lm.draw_layer(layer_id);
+                        tx.send(());
+                    }
                     LayerEvent::MoveTo { layer_id, pos } => lm.move_to(layer_id, pos),
                     LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
                     // LayerEvent::Hide { layer_id } => lm.hide(layer_id),

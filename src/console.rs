@@ -288,16 +288,16 @@ pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
             Ok::<(), Error>(())
         })?;
     }
-    window.lock().flush()?;
     Ok(ConsoleInitParam { window, rx })
 }
 
 pub(crate) async fn handler_task(param: ConsoleInitParam) {
     let res = async {
         let ConsoleInitParam { window, mut rx } = param;
+        window.lock().flush().await?;
 
         while let Some(()) = rx.next().await {
-            window.lock().flush()?;
+            window.lock().flush().await?;
         }
 
         Ok::<(), Error>(())

@@ -105,12 +105,12 @@ impl Window {
         self.event_tx.move_to(self.layer_id, pos)
     }
 
-    pub(crate) fn flush(&mut self) -> Result<()> {
+    pub(crate) async fn flush(&mut self) -> Result<()> {
         self.producer.with_buffer(|buffer| {
             buffer.clone_from(&self.buffer);
         });
         self.producer.store();
-        self.event_tx.draw_layer(self.layer_id)
+        self.event_tx.draw_layer(self.layer_id).await
     }
 }
 

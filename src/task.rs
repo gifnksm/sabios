@@ -1,4 +1,5 @@
 use crate::{
+    co_task::{CoTask, Executor},
     gdt,
     prelude::*,
     sync::{Mutex, OnceCell},
@@ -8,10 +9,11 @@ use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
     vec,
-    vec::Vec,
 };
 use core::{
-    fmt, mem,
+    fmt,
+    future::Future,
+    mem,
     sync::atomic::{AtomicU64, Ordering},
 };
 use custom_debug_derive::Debug as CustomDebug;
@@ -22,8 +24,8 @@ static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 pub(crate) fn init() {
     let mut task_manager = TaskManager::new();
 
-    let main_task = Task::new(dummy_task, 0);
-    let main_task_id = main_task.task_id;
+    let main_task = Task::new(async { panic!("dummy task called") });
+    let main_task_id = main_task.id;
 
     task_manager.spawn(Arc::new(main_task));
     task_manager.wake(main_task_id);
@@ -31,20 +33,20 @@ pub(crate) fn init() {
     TASK_MANAGER.init_once(|| Mutex::new(task_manager));
 }
 
-pub(crate) extern "C" fn dummy_task(_task_id: TaskId, _arg: u64) {
-    panic!("dummy task called");
+struct EntryPointArg {
+    executor: Executor,
 }
 
-pub(crate) extern "C" fn idle_task(task_id: TaskId, arg: u64) {
-    crate::println!("idle task: task_id={}, data={:x}", task_id, arg);
-    crate::hlt_loop();
+extern "C" fn task_entry_point(arg: *mut EntryPointArg) {
+    let EntryPointArg { mut executor } = *unsafe { Box::from_raw(arg) };
+    executor.run();
 }
 
-pub(crate) fn spawn(entry_point: EntryPoint, arg: u64) -> Result<TaskId> {
+pub(crate) fn spawn(task: Task) -> Result<TaskId> {
     assert!(!interrupts::are_enabled());
 
-    let task = Arc::new(Task::new(entry_point, arg));
-    let task_id = task.task_id;
+    let task = Arc::new(task);
+    let task_id = task.id;
 
     TASK_MANAGER.get().with_lock(|task_manager| {
         task_manager.spawn(task);
@@ -54,6 +56,11 @@ pub(crate) fn spawn(entry_point: EntryPoint, arg: u64) -> Result<TaskId> {
     Ok(task_id)
 }
 
+pub(crate) fn wake(task_id: TaskId) {
+    assert!(!interrupts::are_enabled());
+    TASK_MANAGER.get().lock().wake(task_id)
+}
+
 pub(crate) fn sleep(task_id: TaskId) {
     assert!(!interrupts::are_enabled());
     if let Some(switch_task) = TASK_MANAGER.get().with_lock(|tm| tm.sleep(task_id)) {
@@ -61,9 +68,9 @@ pub(crate) fn sleep(task_id: TaskId) {
     }
 }
 
-pub(crate) fn wake(task_id: TaskId) {
+pub(crate) fn current() -> Arc<Task> {
     assert!(!interrupts::are_enabled());
-    TASK_MANAGER.get().lock().wake(task_id)
+    TASK_MANAGER.get().lock().current_task()
 }
 
 #[derive(Debug)]
@@ -107,40 +114,28 @@ impl TaskManager {
     }
 
     fn spawn(&mut self, task: Arc<Task>) {
-        let task_id = task.task_id;
+        let task_id = task.id;
         if self.tasks.insert(task_id, task).is_some() {
             panic!("task with same ID already in tasks")
         }
     }
 
     fn switch_context(&mut self, sleep_current: bool) -> Option<SwitchTask> {
-        let current_task;
-        loop {
-            #[allow(clippy::unwrap_used)] // current task must be exist
-            let current_task_id = self.wake_queue.pop_front().unwrap();
-            match self.tasks.get(&current_task_id) {
-                Some(task) => current_task = Arc::clone(task),
-                None => continue,
-            }
-            if !sleep_current {
-                self.wake_queue.push_back(current_task_id);
-            }
-            break;
+        let current_task = self.current_task();
+
+        // move current task
+        #[allow(clippy::unwrap_used)] // current task must be exist
+        let current_task_id = self.wake_queue.pop_front().unwrap();
+        assert_eq!(current_task_id, current_task.id);
+        if !sleep_current {
+            self.wake_queue.push_back(current_task_id);
         }
 
-        let next_task;
-        loop {
-            #[allow(clippy::unwrap_used)] // next task must be exist
-            let next_task_id = self.wake_queue.front().copied().unwrap();
-            match self.tasks.get(&next_task_id) {
-                Some(task) => next_task = Arc::clone(task),
-                None => continue,
-            }
-            break;
-        }
-        if current_task.task_id == next_task.task_id {
+        let next_task = self.current_task();
+        if current_task.id == next_task.id {
             return None;
         }
+
         Some(SwitchTask {
             next_task,
             current_task,
@@ -169,6 +164,20 @@ impl TaskManager {
             // sleep waiting task
             let _ = self.wake_queue.remove(idx);
             None
+        }
+    }
+
+    fn current_task(&mut self) -> Arc<Task> {
+        loop {
+            #[allow(clippy::unwrap_used)] // current task must be exist
+            let task_id = self.wake_queue.front().copied().unwrap();
+            match self.tasks.get(&task_id) {
+                Some(task) => return Arc::clone(task),
+                None => {
+                    // current task exited
+                    let _ = self.wake_queue.pop_front();
+                }
+            }
         }
     }
 }
@@ -231,53 +240,67 @@ struct TaskContext {
     fxsave_area: [u8; 512],
 }
 
+impl Default for TaskContext {
+    fn default() -> Self {
+        unsafe { mem::zeroed() }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(16))]
 struct TaskStackElement {
-    _dummy: [u64; 2],
+    _dummy: [u8; 16],
 }
 static_assertions::const_assert_eq!(mem::size_of::<TaskStackElement>(), 16);
 
 #[derive(CustomDebug)]
 pub(crate) struct Task {
-    task_id: TaskId,
+    id: TaskId,
     #[debug(skip)]
     ctx: Box<TaskContext>,
     #[debug(skip)]
-    stack: Vec<TaskStackElement>,
+    _stack: Box<[TaskStackElement]>,
 }
 
-pub(crate) type EntryPoint = extern "C" fn(arg: TaskId, arg: u64);
-
 impl Task {
-    fn new(entry_point: EntryPoint, arg: u64) -> Self {
-        let task_id = TaskId::new();
+    pub(crate) fn new(future: impl Future<Output = ()> + Send + 'static) -> Self {
+        let id = TaskId::new();
         let stack_size = 1024 * 8;
         let stack_elem_size = mem::size_of::<TaskStackElement>();
-        let mut task = Self {
-            task_id,
-            ctx: Box::new(unsafe { mem::zeroed() }),
-            stack: vec![
-                TaskStackElement::default();
-                (stack_size + stack_elem_size - 1) / stack_elem_size
-            ],
-        };
+        let stack =
+            vec![TaskStackElement::default(); (stack_size + stack_elem_size - 1) / stack_elem_size]
+                .into_boxed_slice();
 
+        let mut executor = Executor::new();
+        executor.spawn(CoTask::new(future));
+        let arg = Box::new(EntryPointArg { executor });
+
+        let mut ctx = Box::new(TaskContext::default());
+
+        // arguments
+        ctx.rip = task_entry_point as *const u8 as u64;
+        ctx.rdi = Box::into_raw(arg) as u64;
+
+        // registers
         let selectors = gdt::selectors();
+        ctx.cr3 = Cr3::read().0.start_address().as_u64();
+        ctx.rflags = 0x202;
+        ctx.cs = u64::from(selectors.kernel_code_selector.0);
+        ctx.ss = u64::from(selectors.kernel_stack_selector.0);
+        ctx.rsp = unsafe { (stack.as_ptr() as *const u8).add(stack_size - 8) as u64 };
+        assert!(ctx.rsp & 0xf == 8);
 
-        task.ctx.rip = entry_point as *const u8 as u64;
-        task.ctx.rdi = task_id.0;
-        task.ctx.rsi = arg;
+        ctx.fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
 
-        task.ctx.cr3 = Cr3::read().0.start_address().as_u64();
-        task.ctx.rflags = 0x202;
-        task.ctx.cs = u64::from(selectors.kernel_code_selector.0);
-        task.ctx.ss = u64::from(selectors.kernel_stack_selector.0);
-        task.ctx.rsp = unsafe { (task.stack.as_ptr() as *const u8).add(stack_size - 8) as u64 };
-        assert!(task.ctx.rsp & 0xf == 8);
+        Self {
+            id,
+            ctx,
+            _stack: stack,
+        }
+    }
 
-        task.ctx.fxsave_area[24..][..4].copy_from_slice(&0x1f80u32.to_le_bytes());
-        task
+    pub(crate) fn id(&self) -> TaskId {
+        self.id
     }
 
     fn switch(next: &Task, current: &Task) {

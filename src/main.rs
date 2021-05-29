@@ -15,6 +15,8 @@
 
 extern crate alloc;
 
+use crate::task::Task;
+
 use self::{
     co_task::{CoTask, Executor},
     graphics::{Color, Draw, Point, Rectangle, Size},
@@ -29,8 +31,7 @@ use bootloader::{
 use core::{mem, panic::PanicInfo};
 use futures_util::StreamExt;
 use sync::{mpsc, OnceCell};
-use task::TaskId;
-use x86_64::VirtAddr;
+use x86_64::{instructions::interrupts, VirtAddr};
 
 mod acpi;
 mod allocator;
@@ -150,9 +151,19 @@ fn start_window() -> ! {
         }
     }));
 
-    let task_b_id = task::spawn(task_b, 1).expect("failed to spawn task");
-    task::spawn(task::idle_task, 0xdeadbeef).expect("failed to spawn task");
-    task::spawn(task::idle_task, 0xcafebabe).expect("failed to spawn task");
+    let task_b_id = task::spawn(Task::new(task_b())).expect("failed to spawn task");
+    task::spawn(Task::new(async {
+        let task = interrupts::without_interrupts(task::current);
+        println!("idle task: task_id={}, data=deadbeef", task.id());
+        hlt_loop();
+    }))
+    .expect("failed to spawn task");
+    task::spawn(Task::new(async {
+        let task = interrupts::without_interrupts(task::current);
+        println!("idle task: task_id={}, data=cafebabe", task.id());
+        hlt_loop();
+    }))
+    .expect("failed to spawn task");
 
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);
@@ -181,26 +192,36 @@ fn start_window() -> ! {
     executor.run();
 }
 
-#[allow(clippy::unwrap_used)]
-extern "C" fn task_b(_task_id: TaskId, _arg: u64) {
-    let mut window = Window::builder()
-        .pos(Point::new(100, 100))
-        .size(Size::new(160, 52))
-        .draggable(true)
-        .height(usize::MAX)
-        .build()
-        .unwrap();
-    window::draw_window(&mut window, "TaskB Window");
-    window.flush().unwrap();
+async fn task_b() {
+    let res = async {
+        let mut window = Window::builder()
+            .pos(Point::new(100, 100))
+            .size(Size::new(160, 52))
+            .draggable(true)
+            .height(usize::MAX)
+            .build()?;
+        window::draw_window(&mut window, "TaskB Window");
+        window.flush()?;
 
-    for i in 0.. {
-        window.fill_rect(
-            Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
-            Color::from_code(0xc6c6c6),
+        for i in 0.. {
+            window.fill_rect(
+                Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
+                Color::from_code(0xc6c6c6),
+            );
+            let s = format!("{:010}", i);
+            font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
+            window.flush()?;
+        }
+
+        Ok::<(), Error>(())
+    }
+    .await;
+
+    if let Err(err) = res {
+        panic!(
+            "error occurred during handling task b window event: {}",
+            err
         );
-        let s = format!("{:010}", i);
-        font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
-        window.flush().unwrap();
     }
 }
 

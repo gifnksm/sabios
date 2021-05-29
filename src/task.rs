@@ -3,25 +3,36 @@ use crate::{
     prelude::*,
     sync::{Mutex, OnceCell},
 };
-use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+    vec,
+    vec::Vec,
+};
 use core::{
     fmt, mem,
     sync::atomic::{AtomicU64, Ordering},
 };
-use crossbeam_queue::ArrayQueue;
 use custom_debug_derive::Debug as CustomDebug;
-use x86_64::registers::control::Cr3;
+use x86_64::{instructions::interrupts, registers::control::Cr3};
 
-static TASK_QUEUE: OnceCell<ArrayQueue<Arc<Task>>> = OnceCell::uninit();
-static CURRENT_TASK: OnceCell<Mutex<Arc<Task>>> = OnceCell::uninit();
+static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
-    TASK_QUEUE.init_once(|| ArrayQueue::new(100));
-    CURRENT_TASK.init_once(|| Mutex::new(Arc::new(Task::new(dummy_task, 0))));
+    let mut task_manager = TaskManager::new();
+
+    let main_task = Task::new(dummy_task, 0);
+    let main_task_id = main_task.task_id;
+
+    task_manager.spawn(Arc::new(main_task));
+    task_manager.wake(main_task_id);
+
+    TASK_MANAGER.init_once(|| Mutex::new(task_manager));
 }
 
-extern "C" fn dummy_task(_task_id: TaskId, _arg: u64) {
-    panic!("dummy task called;")
+pub(crate) extern "C" fn dummy_task(_task_id: TaskId, _arg: u64) {
+    panic!("dummy task called");
 }
 
 pub(crate) extern "C" fn idle_task(task_id: TaskId, arg: u64) {
@@ -29,36 +40,142 @@ pub(crate) extern "C" fn idle_task(task_id: TaskId, arg: u64) {
     crate::hlt_loop();
 }
 
-pub(crate) fn spawn(entry_point: EntryPoint, arg: u64) -> Result<()> {
+pub(crate) fn spawn(entry_point: EntryPoint, arg: u64) -> Result<TaskId> {
+    assert!(!interrupts::are_enabled());
+
     let task = Arc::new(Task::new(entry_point, arg));
-    TASK_QUEUE.get().push(task).map_err(|_| ErrorKind::Full)?;
-    Ok(())
+    let task_id = task.task_id;
+
+    TASK_MANAGER.get().with_lock(|task_manager| {
+        task_manager.spawn(task);
+        task_manager.wake(task_id);
+    });
+
+    Ok(task_id)
 }
 
-pub(crate) fn on_interrupt() {
-    let queue = TASK_QUEUE.get();
-    let next_task = match queue.pop() {
-        Some(task) => task,
-        None => return,
-    };
+pub(crate) fn sleep(task_id: TaskId) {
+    assert!(!interrupts::are_enabled());
+    if let Some(switch_task) = TASK_MANAGER.get().with_lock(|tm| tm.sleep(task_id)) {
+        switch_task.switch();
+    }
+}
 
-    unsafe {
-        let (next_task, current_task) = CURRENT_TASK.get().with_lock(|current_task_slot| {
-            let current_task_ptr = (&**current_task_slot) as *const Task;
-            let next_task_ptr = (&*next_task) as *const Task;
+pub(crate) fn wake(task_id: TaskId) {
+    assert!(!interrupts::are_enabled());
+    TASK_MANAGER.get().lock().wake(task_id)
+}
 
-            let current_task = mem::replace(current_task_slot, next_task);
-            #[allow(clippy::unwrap_used)]
-            queue.push(current_task).unwrap();
+#[derive(Debug)]
+#[must_use]
+struct SwitchTask {
+    next_task: Arc<Task>,
+    current_task: Arc<Task>,
+}
 
+impl SwitchTask {
+    fn switch(self) {
+        assert!(Arc::strong_count(&self.next_task) > 1);
+        assert!(Arc::strong_count(&self.current_task) > 1);
+        unsafe {
+            let next_task_ptr = Arc::as_ptr(&self.next_task);
+            let current_task_ptr = Arc::as_ptr(&self.current_task);
+            drop(self.next_task);
+            drop(self.current_task);
             #[allow(clippy::unwrap_used)]
             let next_task = next_task_ptr.as_ref().unwrap();
             #[allow(clippy::unwrap_used)]
             let current_task = current_task_ptr.as_ref().unwrap();
-            (next_task, current_task)
-        });
 
-        Task::switch(&next_task, &current_task)
+            Task::switch(next_task, current_task)
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TaskManager {
+    tasks: BTreeMap<TaskId, Arc<Task>>,
+    wake_queue: VecDeque<TaskId>,
+}
+
+impl TaskManager {
+    fn new() -> Self {
+        Self {
+            tasks: BTreeMap::new(),
+            wake_queue: VecDeque::new(),
+        }
+    }
+
+    fn spawn(&mut self, task: Arc<Task>) {
+        let task_id = task.task_id;
+        if self.tasks.insert(task_id, task).is_some() {
+            panic!("task with same ID already in tasks")
+        }
+    }
+
+    fn switch_context(&mut self, sleep_current: bool) -> Option<SwitchTask> {
+        let current_task;
+        loop {
+            #[allow(clippy::unwrap_used)] // current task must be exist
+            let current_task_id = self.wake_queue.pop_front().unwrap();
+            match self.tasks.get(&current_task_id) {
+                Some(task) => current_task = Arc::clone(task),
+                None => continue,
+            }
+            if !sleep_current {
+                self.wake_queue.push_back(current_task_id);
+            }
+            break;
+        }
+
+        let next_task;
+        loop {
+            #[allow(clippy::unwrap_used)] // next task must be exist
+            let next_task_id = self.wake_queue.front().copied().unwrap();
+            match self.tasks.get(&next_task_id) {
+                Some(task) => next_task = Arc::clone(task),
+                None => continue,
+            }
+            break;
+        }
+        if current_task.task_id == next_task.task_id {
+            return None;
+        }
+        Some(SwitchTask {
+            next_task,
+            current_task,
+        })
+    }
+
+    fn wake(&mut self, task_id: TaskId) {
+        if !self.tasks.contains_key(&task_id) {
+            // finished task
+            return;
+        }
+        if self.wake_queue.contains(&task_id) {
+            // already requested to wake
+            return;
+        }
+        // request to wake
+        self.wake_queue.push_back(task_id);
+    }
+
+    fn sleep(&mut self, task_id: TaskId) -> Option<SwitchTask> {
+        let idx = self.wake_queue.iter().position(|t| *t == task_id)?;
+        if idx == 0 {
+            // sleep running task
+            self.switch_context(true)
+        } else {
+            // sleep waiting task
+            let _ = self.wake_queue.remove(idx);
+            None
+        }
+    }
+}
+
+pub(crate) fn on_interrupt() {
+    if let Some(task_switch) = TASK_MANAGER.get().with_lock(|tm| tm.switch_context(false)) {
+        task_switch.switch();
     }
 }
 
@@ -163,13 +280,13 @@ impl Task {
         task
     }
 
-    fn switch(next: &'static Task, current: &'static Task) {
-        switch_task(&next.ctx, &current.ctx);
+    fn switch(next: &Task, current: &Task) {
+        switch_context(&next.ctx, &current.ctx);
     }
 }
 
 #[naked]
-extern "C" fn switch_task(_next: &'static TaskContext, _current: &'static TaskContext) {
+extern "C" fn switch_context(_next: &TaskContext, _current: &TaskContext) {
     unsafe {
         asm!(
             "mov [rsi + 0x40], rax",

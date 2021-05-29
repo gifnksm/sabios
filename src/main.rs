@@ -28,6 +28,7 @@ use bootloader::{
 };
 use core::{mem, panic::PanicInfo};
 use futures_util::StreamExt;
+use sync::{mpsc, OnceCell};
 use task::TaskId;
 use x86_64::VirtAddr;
 
@@ -115,6 +116,8 @@ fn init(boot_info: &'static mut BootInfo) -> Result<()> {
     Ok(())
 }
 
+static KEYBOARD_EVENT_TX: OnceCell<mpsc::Sender<keyboard::KeyboardEvent>> = OnceCell::uninit();
+
 #[allow(clippy::expect_used)]
 fn start_window() -> ! {
     let layer_task = layer::handler_task();
@@ -147,9 +150,28 @@ fn start_window() -> ! {
         }
     }));
 
-    task::spawn(task_b, 1).expect("failed to spawn task");
+    let task_b_id = task::spawn(task_b, 1).expect("failed to spawn task");
     task::spawn(task::idle_task, 0xdeadbeef).expect("failed to spawn task");
     task::spawn(task::idle_task, 0xcafebabe).expect("failed to spawn task");
+
+    let (tx, mut rx) = mpsc::channel(100);
+    KEYBOARD_EVENT_TX.init_once(|| tx);
+    executor.spawn(CoTask::new(async move {
+        let tx = text_window::sender();
+        while let Some(event) = rx.next().await {
+            #[allow(clippy::unwrap_used)]
+            tx.send(event).unwrap();
+            match event.ascii {
+                's' => {
+                    x86_64::instructions::interrupts::without_interrupts(|| task::sleep(task_b_id));
+                }
+                'w' => {
+                    x86_64::instructions::interrupts::without_interrupts(|| task::wake(task_b_id));
+                }
+                _ => {}
+            }
+        }
+    }));
 
     x86_64::instructions::interrupts::enable();
 

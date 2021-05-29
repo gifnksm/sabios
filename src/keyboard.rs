@@ -1,7 +1,6 @@
 use crate::{
     prelude::*,
     sync::{mpsc, OnceCell},
-    text_window,
 };
 use core::future::Future;
 use enumflags2::{bitflags, BitFlags};
@@ -123,7 +122,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let tx = text_window::sender();
+            let tx = crate::KEYBOARD_EVENT_TX.get();
 
             while let Some(event) = rx.next().await {
                 let ascii = if event

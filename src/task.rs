@@ -22,7 +22,7 @@ use x86_64::{instructions::interrupts, registers::control::Cr3};
 static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
-    let main_task = Task::new(async { panic!("dummy task called") });
+    let main_task = Task::new_main();
     main_task.level.store(MAX_LEVEL, Ordering::Relaxed);
     TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
 
@@ -280,6 +280,20 @@ pub(crate) struct Task {
 }
 
 impl Task {
+    fn new_main() -> Self {
+        let id = TaskId::new();
+        let level = AtomicUsize::new(DEFAULT_LEVEL);
+        let stack = vec![].into_boxed_slice();
+        let ctx = Box::new(TaskContext::default());
+
+        Self {
+            id,
+            level,
+            ctx,
+            _stack: stack,
+        }
+    }
+
     pub(crate) fn new(future: impl Future<Output = ()> + Send + 'static) -> Self {
         let id = TaskId::new();
         let level = AtomicUsize::new(DEFAULT_LEVEL);

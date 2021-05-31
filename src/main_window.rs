@@ -12,6 +12,7 @@ pub(crate) async fn handler_task() {
         let mut window = Window::builder()
             .size(Size::new(160, 52))
             .pos(Point::new(300, 100))
+            .draggable(true)
             .height(layer::MAIN_WINDOW_ID)
             .build()?;
         window::draw_window(&mut window, "Hello Window");

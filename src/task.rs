@@ -14,7 +14,7 @@ use core::{
     fmt,
     future::Future,
     mem,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 use custom_debug_derive::Debug as CustomDebug;
 use x86_64::{instructions::interrupts, registers::control::Cr3};
@@ -23,6 +23,7 @@ static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
     let main_task = Task::new(async { panic!("dummy task called") });
+    main_task.level.store(MAX_LEVEL, Ordering::Relaxed);
     TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
 }
 
@@ -92,11 +93,14 @@ impl SwitchTask {
     }
 }
 
+const MAX_LEVEL: usize = 3;
+const DEFAULT_LEVEL: usize = 1;
+
 #[derive(Debug)]
 struct TaskManager {
     tasks: BTreeMap<TaskId, Arc<Task>>,
     current_task_id: TaskId,
-    wake_queue: VecDeque<TaskId>,
+    wake_queue: [VecDeque<TaskId>; MAX_LEVEL + 1],
 }
 
 impl TaskManager {
@@ -107,7 +111,12 @@ impl TaskManager {
         Self {
             tasks,
             current_task_id,
-            wake_queue: VecDeque::new(),
+            wake_queue: [
+                VecDeque::new(),
+                VecDeque::new(),
+                VecDeque::new(),
+                VecDeque::new(),
+            ],
         }
     }
 
@@ -127,7 +136,8 @@ impl TaskManager {
         };
 
         if !sleep_current {
-            self.wake_queue.push_back(current_task.id);
+            let level = current_task.level.load(Ordering::Relaxed);
+            self.wake_queue[level].push_back(current_task.id);
         }
         self.current_task_id = next_task.id;
 
@@ -138,27 +148,33 @@ impl TaskManager {
     }
 
     fn wake(&mut self, task_id: TaskId) {
-        if !self.tasks.contains_key(&task_id) {
-            // finished task
-            return;
-        }
-        if self.current_task_id == task_id || self.wake_queue.contains(&task_id) {
+        let task = match self.tasks.get(&task_id) {
+            Some(task) => task,
+            None => return, // finished task
+        };
+        let level = task.level.load(Ordering::Relaxed);
+        if self.current_task_id == task_id || self.wake_queue[level].contains(&task_id) {
             // already requested to wake
             return;
         }
         // request to wake
-        self.wake_queue.push_back(task_id);
+        self.wake_queue[level].push_back(task_id);
     }
 
     fn sleep(&mut self, task_id: TaskId) -> Option<SwitchTask> {
         if self.current_task_id == task_id {
             // sleep running task
-            self.switch_context(true)
-        } else {
-            let idx = self.wake_queue.iter().position(|t| *t == task_id)?;
-            let _ = self.wake_queue.remove(idx);
-            None
+            return self.switch_context(true);
         }
+
+        let task = match self.tasks.get(&task_id) {
+            Some(task) => task,
+            None => return None, // finished task
+        };
+        let level = task.level.load(Ordering::Relaxed);
+        let idx = self.wake_queue[level].iter().position(|t| *t == task_id)?;
+        let _ = self.wake_queue[level].remove(idx);
+        None
     }
 
     fn current_task(&self) -> Arc<Task> {
@@ -167,16 +183,14 @@ impl TaskManager {
     }
 
     fn pop_next_task(&mut self) -> Option<Arc<Task>> {
-        loop {
-            let task_id = self.wake_queue.pop_front()?;
-            match self.tasks.get(&task_id) {
-                Some(task) => return Some(Arc::clone(task)),
-                None => {
-                    // task exited
-                    continue;
+        for queue in self.wake_queue.iter_mut().rev() {
+            while let Some(task_id) = queue.pop_front() {
+                if let Some(task) = self.tasks.get(&task_id) {
+                    return Some(Arc::clone(task));
                 }
             }
         }
+        None
     }
 }
 
@@ -254,6 +268,7 @@ static_assertions::const_assert_eq!(mem::size_of::<TaskStackElement>(), 16);
 #[derive(CustomDebug)]
 pub(crate) struct Task {
     id: TaskId,
+    level: AtomicUsize,
     #[debug(skip)]
     ctx: Box<TaskContext>,
     #[debug(skip)]
@@ -263,6 +278,7 @@ pub(crate) struct Task {
 impl Task {
     pub(crate) fn new(future: impl Future<Output = ()> + Send + 'static) -> Self {
         let id = TaskId::new();
+        let level = AtomicUsize::new(DEFAULT_LEVEL);
         let stack_size = 1024 * 8;
         let stack_elem_size = mem::size_of::<TaskStackElement>();
         let stack =
@@ -292,6 +308,7 @@ impl Task {
 
         Self {
             id,
+            level,
             ctx,
             _stack: stack,
         }

@@ -23,11 +23,11 @@ static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
     let main_task = Task::new_main();
-    main_task.level.store(MAX_LEVEL, Ordering::Relaxed);
+    main_task.set_level(MAX_LEVEL);
     TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
 
     let idle_task = Task::new(async { crate::hlt_loop() });
-    idle_task.level.store(0, Ordering::Relaxed);
+    idle_task.set_level(MIN_LEVEL);
     spawn(idle_task);
 }
 
@@ -98,6 +98,7 @@ impl SwitchTask {
 }
 
 const MAX_LEVEL: usize = 3;
+const MIN_LEVEL: usize = 0;
 const DEFAULT_LEVEL: usize = 1;
 
 #[derive(Debug)]
@@ -133,14 +134,19 @@ impl TaskManager {
 
     fn switch_context(&mut self, sleep_current: bool) -> Option<SwitchTask> {
         let current_task = self.current_task();
+        let next_task_level = if sleep_current {
+            MIN_LEVEL
+        } else {
+            current_task.level()
+        };
 
-        let next_task = match self.pop_next_task() {
+        let next_task = match self.pop_next_task(next_task_level) {
             Some(next_task) if next_task.id != current_task.id => next_task,
             _ => return None, // do nothing
         };
 
         if !sleep_current {
-            let level = current_task.level.load(Ordering::Relaxed);
+            let level = current_task.level();
             self.wake_queue[level].push_back(current_task.id);
         }
         self.current_task_id = next_task.id;
@@ -156,9 +162,9 @@ impl TaskManager {
             Some(task) => task,
             None => return, // finished task
         };
-        let level = task.level.load(Ordering::Relaxed);
+        let level = task.level();
         if self.current_task_id == task_id || self.wake_queue[level].contains(&task_id) {
-            // already requested to wake
+            // already running or requested to wake
             return;
         }
         // request to wake
@@ -175,7 +181,7 @@ impl TaskManager {
             Some(task) => task,
             None => return None, // finished task
         };
-        let level = task.level.load(Ordering::Relaxed);
+        let level = task.level();
         let idx = self.wake_queue[level].iter().position(|t| *t == task_id)?;
         let _ = self.wake_queue[level].remove(idx);
         None
@@ -186,8 +192,8 @@ impl TaskManager {
         Arc::clone(self.tasks.get(&self.current_task_id).unwrap())
     }
 
-    fn pop_next_task(&mut self) -> Option<Arc<Task>> {
-        for queue in self.wake_queue.iter_mut().rev() {
+    fn pop_next_task(&mut self, task_level: usize) -> Option<Arc<Task>> {
+        for queue in self.wake_queue[task_level..].iter_mut().rev() {
             while let Some(task_id) = queue.pop_front() {
                 if let Some(task) = self.tasks.get(&task_id) {
                     return Some(Arc::clone(task));
@@ -334,6 +340,14 @@ impl Task {
 
     pub(crate) fn id(&self) -> TaskId {
         self.id
+    }
+
+    fn level(&self) -> usize {
+        self.level.load(Ordering::Relaxed)
+    }
+
+    fn set_level(&self, level: usize) {
+        self.level.store(level, Ordering::Relaxed);
     }
 
     fn switch(next: &Task, current: &Task) {

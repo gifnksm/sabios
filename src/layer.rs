@@ -283,6 +283,7 @@ enum LayerEvent {
     MoveTo {
         layer_id: LayerId,
         pos: Point<i32>,
+        tx: oneshot::Sender<()>,
     },
     SetHeight {
         layer_id: LayerId,
@@ -294,6 +295,7 @@ enum LayerEvent {
     MouseEvent {
         cursor_layer_id: LayerId,
         event: MouseEvent,
+        tx: oneshot::Sender<()>,
     },
 }
 
@@ -323,11 +325,15 @@ impl EventSender {
     pub(crate) async fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.send(LayerEvent::DrawLayer { layer_id, tx })?;
-        Ok(rx.await)
+        rx.await;
+        Ok(())
     }
 
-    pub(crate) fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
-        self.send(LayerEvent::MoveTo { layer_id, pos })
+    pub(crate) async fn move_to(&self, layer_id: LayerId, pos: Point<i32>) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.send(LayerEvent::MoveTo { layer_id, pos, tx })?;
+        rx.await;
+        Ok(())
     }
 
     pub(crate) fn set_height(&self, layer_id: LayerId, height: usize) -> Result<()> {
@@ -338,11 +344,19 @@ impl EventSender {
     //     self.send(LayerEvent::Hide { layer_id })
     // }
 
-    pub(crate) fn mouse_event(&self, cursor_layer_id: LayerId, event: MouseEvent) -> Result<()> {
+    pub(crate) async fn mouse_event(
+        &self,
+        cursor_layer_id: LayerId,
+        event: MouseEvent,
+    ) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
         self.send(LayerEvent::MouseEvent {
             cursor_layer_id,
             event,
-        })
+            tx,
+        })?;
+        rx.await;
+        Ok(())
     }
 }
 
@@ -363,12 +377,16 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                         lm.draw_layer(layer_id);
                         tx.send(());
                     }
-                    LayerEvent::MoveTo { layer_id, pos } => lm.move_to(layer_id, pos),
+                    LayerEvent::MoveTo { layer_id, pos, tx } => {
+                        lm.move_to(layer_id, pos);
+                        tx.send(());
+                    }
                     LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
                     // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
                     LayerEvent::MouseEvent {
                         cursor_layer_id,
                         event,
+                        tx,
                     } => {
                         let MouseEvent {
                             down,
@@ -389,6 +407,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                                 .filter(|layer| layer.draggable)
                                 .map(|layer| layer.id());
                         }
+                        tx.send(());
                     }
                 }
             }

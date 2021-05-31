@@ -134,7 +134,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                 let pos_diff = cursor_pos - prev_cursor_pos;
 
                 if prev_cursor_pos != cursor_pos {
-                    window.move_to(cursor_pos)?;
+                    window.move_to(cursor_pos).await?;
                 }
                 tx.mouse_event(
                     cursor_layer_id,
@@ -144,7 +144,8 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                         pos: cursor_pos,
                         pos_diff,
                     },
-                )?;
+                )
+                .await?;
             }
 
             Ok::<(), Error>(())

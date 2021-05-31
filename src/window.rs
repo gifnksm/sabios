@@ -101,8 +101,8 @@ impl Window {
         self.layer_id
     }
 
-    pub(crate) fn move_to(&self, pos: Point<i32>) -> Result<()> {
-        self.event_tx.move_to(self.layer_id, pos)
+    pub(crate) async fn move_to(&self, pos: Point<i32>) -> Result<()> {
+        self.event_tx.move_to(self.layer_id, pos).await
     }
 
     pub(crate) async fn flush(&mut self) -> Result<()> {

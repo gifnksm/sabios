@@ -22,15 +22,8 @@ use x86_64::{instructions::interrupts, registers::control::Cr3};
 static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
-    let mut task_manager = TaskManager::new();
-
     let main_task = Task::new(async { panic!("dummy task called") });
-    let main_task_id = main_task.id;
-
-    task_manager.spawn(Arc::new(main_task));
-    task_manager.wake(main_task_id);
-
-    TASK_MANAGER.init_once(|| Mutex::new(task_manager));
+    TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
 }
 
 struct EntryPointArg {
@@ -102,13 +95,18 @@ impl SwitchTask {
 #[derive(Debug)]
 struct TaskManager {
     tasks: BTreeMap<TaskId, Arc<Task>>,
+    current_task_id: TaskId,
     wake_queue: VecDeque<TaskId>,
 }
 
 impl TaskManager {
-    fn new() -> Self {
+    fn new(current_task: Task) -> Self {
+        let current_task_id = current_task.id;
+        let mut tasks = BTreeMap::new();
+        tasks.insert(current_task_id, Arc::new(current_task));
         Self {
-            tasks: BTreeMap::new(),
+            tasks,
+            current_task_id,
             wake_queue: VecDeque::new(),
         }
     }
@@ -123,18 +121,15 @@ impl TaskManager {
     fn switch_context(&mut self, sleep_current: bool) -> Option<SwitchTask> {
         let current_task = self.current_task();
 
-        // move current task
-        #[allow(clippy::unwrap_used)] // current task must be exist
-        let current_task_id = self.wake_queue.pop_front().unwrap();
-        assert_eq!(current_task_id, current_task.id);
-        if !sleep_current {
-            self.wake_queue.push_back(current_task_id);
-        }
+        let next_task = match self.pop_next_task() {
+            Some(next_task) if next_task.id != current_task.id => next_task,
+            _ => return None, // do nothing
+        };
 
-        let next_task = self.current_task();
-        if current_task.id == next_task.id {
-            return None;
+        if !sleep_current {
+            self.wake_queue.push_back(current_task.id);
         }
+        self.current_task_id = next_task.id;
 
         Some(SwitchTask {
             next_task,
@@ -147,7 +142,7 @@ impl TaskManager {
             // finished task
             return;
         }
-        if self.wake_queue.contains(&task_id) {
+        if self.current_task_id == task_id || self.wake_queue.contains(&task_id) {
             // already requested to wake
             return;
         }
@@ -156,26 +151,29 @@ impl TaskManager {
     }
 
     fn sleep(&mut self, task_id: TaskId) -> Option<SwitchTask> {
-        let idx = self.wake_queue.iter().position(|t| *t == task_id)?;
-        if idx == 0 {
+        if self.current_task_id == task_id {
             // sleep running task
             self.switch_context(true)
         } else {
-            // sleep waiting task
+            let idx = self.wake_queue.iter().position(|t| *t == task_id)?;
             let _ = self.wake_queue.remove(idx);
             None
         }
     }
 
-    fn current_task(&mut self) -> Arc<Task> {
+    fn current_task(&self) -> Arc<Task> {
+        #[allow(clippy::unwrap_used)] // current task must be exist
+        Arc::clone(self.tasks.get(&self.current_task_id).unwrap())
+    }
+
+    fn pop_next_task(&mut self) -> Option<Arc<Task>> {
         loop {
-            #[allow(clippy::unwrap_used)] // current task must be exist
-            let task_id = self.wake_queue.front().copied().unwrap();
+            let task_id = self.wake_queue.pop_front()?;
             match self.tasks.get(&task_id) {
-                Some(task) => return Arc::clone(task),
+                Some(task) => return Some(Arc::clone(task)),
                 None => {
-                    // current task exited
-                    let _ = self.wake_queue.pop_front();
+                    // task exited
+                    continue;
                 }
             }
         }

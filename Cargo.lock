@@ -70,9 +70,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.6.1"
+version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63396b8a4b9de3f4fdfb320ab6080762242f66a8ef174c49d8e19b674db4cdbe"
+checksum = "9c59e7af012c713f529e7a3ee57ce9b31ddd858d4b512923602f74608b009631"
 
 [[package]]
 name = "bytes"
@@ -134,9 +134,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-queue"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f6cb3c7f5b8e51bc3ebb73a2327ad4abdbd119dc13223f14f961d2f38486756"
+checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -144,11 +144,10 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-utils"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4feb231f0d4d6af81aed15928e58ecf5816aa62a2393e2c82f46973e92a9a278"
+checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
 dependencies = [
- "autocfg",
  "cfg-if",
 ]
 
@@ -1024,9 +1023,9 @@ dependencies = [
 
 [[package]]
 name = "tar"
-version = "0.4.33"
+version = "0.4.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0bcfbd6a598361fda270d82469fff3d65089dc33e175c9a131f7b4cd395f228"
+checksum = "7d779dc6aeff029314570f666ec83f19df7280bb36ef338442cfa8c604021b80"
 dependencies = [
  "filetime",
  "libc",
@@ -1084,9 +1083,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd3076b5c8cc18138b8f8814895c11eb4de37114a5d127bafdc5e55798ceef37"
+checksum = "0a38d31d7831c6ed7aad00aa4c12d9375fd225a6dd77da1d25b707346319a975"
 dependencies = [
  "autocfg",
  "bytes",
@@ -1186,9 +1185,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-normalization"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07fbfce1c8a97d547e8b5334978438d9d6ec8c20e38f56d4a4374d181493eaef"
+checksum = "33717dca7ac877f497014e10d73f3acf948c342bee31b5ca7892faf94ccc6b49"
 dependencies = [
  "tinyvec",
 ]

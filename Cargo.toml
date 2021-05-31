@@ -21,7 +21,7 @@ arrayvec = { version = "0.7.0", default-features = false }
 bit_field = "0.10.1"
 bootloader = "0.10.6"
 conquer-once = { version = "0.3.2", default-features = false }
-crossbeam-queue = { version = "0.3.1", default-features = false, features = ["alloc"] }
+crossbeam-queue = { version = "0.3.2", default-features = false, features = ["alloc"] }
 custom_debug_derive = "0.5.0"
 derivative = { version = "2.2.0", features = ["use_core"] }
 enumflags2 = "0.7.1"

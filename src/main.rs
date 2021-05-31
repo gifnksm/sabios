@@ -31,7 +31,7 @@ use bootloader::{
 use core::{mem, panic::PanicInfo};
 use futures_util::StreamExt;
 use sync::{mpsc, OnceCell};
-use x86_64::{instructions::interrupts, VirtAddr};
+use x86_64::VirtAddr;
 
 mod acpi;
 mod allocator;
@@ -154,16 +154,6 @@ fn start_window() -> ! {
     task::spawn(Task::new(main_window::handler_task()));
     task::spawn(Task::new(text_window::handler_task()));
     let task_b_id = task::spawn(Task::new(task_b()));
-    task::spawn(Task::new(async {
-        let task = interrupts::without_interrupts(task::current);
-        println!("idle task: task_id={}, data=deadbeef", task.id());
-        hlt_loop();
-    }));
-    task::spawn(Task::new(async {
-        let task = interrupts::without_interrupts(task::current);
-        println!("idle task: task_id={}, data=cafebabe", task.id());
-        hlt_loop();
-    }));
 
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);

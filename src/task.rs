@@ -25,6 +25,10 @@ pub(crate) fn init() {
     let main_task = Task::new(async { panic!("dummy task called") });
     main_task.level.store(MAX_LEVEL, Ordering::Relaxed);
     TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
+
+    let idle_task = Task::new(async { crate::hlt_loop() });
+    idle_task.level.store(0, Ordering::Relaxed);
+    spawn(idle_task);
 }
 
 struct EntryPointArg {

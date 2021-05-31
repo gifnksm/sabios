@@ -1,11 +1,11 @@
 use crate::{
     font,
+    framed_window::FramedWindow,
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
     keyboard::KeyboardEvent,
     prelude::*,
     sync::{mpsc, OnceCell},
     timer,
-    window::{self, Window},
 };
 use core::future::Future;
 use futures_util::{select_biased, FutureExt, StreamExt};
@@ -23,28 +23,25 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
 
     async move {
         let res = async {
-            let window_size = Size::new(160, 52);
-            let mut window = Window::builder()
+            let window_size = Size::new(160, 24);
+            let mut window = FramedWindow::builder("Text Box Test".into())
                 .size(window_size)
                 .pos(Point::new(350, 200))
-                .draggable(true)
-                .height(usize::MAX)
                 .build()?;
 
-            window::draw_window(&mut window, "Text Box Test");
-            window::draw_text_box(
+            draw_text_box(
                 &mut window,
                 Rectangle::new(
-                    Point::new(4, 24),
-                    Size::new(window_size.x - 8, window_size.y - 24 - 4),
+                    Point::new(0, 0),
+                    Size::new(window_size.x, window_size.y),
                 ),
             );
             window.flush().await?;
 
             let mut index = 0;
-            let max_chars = (window_size.x - 16) / 8;
-            let pos = |index| Point::new(8 + 8 * index, 24 + 6);
-            let draw_cursor = |window: &mut Window, index, visible| {
+            let max_chars = (window_size.x - 8) / 8-1;
+            let pos = |index| Point::new(4 + 8 * index, 6);
+            let draw_cursor = |window: &mut FramedWindow, index, visible| {
                 let color = if visible { Color::BLACK } else { Color::WHITE };
                 let pos = pos(index) - Offset::new(0, 1);
                 window.fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
@@ -95,4 +92,42 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             panic!("error occurred during handling text window event: {}", err);
         }
     }
+}
+
+const EDGE_DARK: Color = Color::from_code(0x848484);
+const EDGE_LIGHT: Color = Color::from_code(0xc6c6c6);
+
+pub(crate) fn draw_text_box<D>(drawer: &mut D, area: Rectangle<i32>)
+where
+    D: Draw,
+{
+    // fill main box
+    drawer.fill_rect(
+        Rectangle::new(area.pos + Offset::new(1, 1), area.size - Offset::new(2, 2)),
+        Color::WHITE,
+    );
+
+    // draw border lines
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(area.size.x, 1)),
+        EDGE_DARK,
+    );
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(1, area.size.y)),
+        EDGE_DARK,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(0, area.size.y),
+            Size::new(area.size.x, 1),
+        ),
+        EDGE_LIGHT,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(area.size.x, 0),
+            Size::new(1, area.size.y),
+        ),
+        EDGE_LIGHT,
+    );
 }

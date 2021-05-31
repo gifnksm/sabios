@@ -1,30 +1,26 @@
 use crate::{
     co_task, font,
+    framed_window::FramedWindow,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer,
     prelude::*,
-    window::{self, Window},
 };
 use alloc::format;
 
 pub(crate) async fn handler_task() {
     let res = async {
-        let mut window = Window::builder()
-            .size(Size::new(160, 52))
+        let mut window = FramedWindow::builder("Hello Window".into())
             .pos(Point::new(300, 100))
-            .draggable(true)
-            .height(layer::MAIN_WINDOW_ID)
+            .size(Size::new(150, 24))
             .build()?;
-        window::draw_window(&mut window, "Hello Window");
         window.flush().await?;
 
         for count in 0.. {
             window.fill_rect(
-                Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
+                Rectangle::new(Point::new(20, 4), Size::new(8 * 10, 16)),
                 Color::from_code(0xc6c6c6),
             );
             let s = format!("{:010}", count);
-            font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
+            font::draw_str(&mut window, Point::new(20, 4), &s, Color::BLACK);
             window.flush().await?;
             co_task::yield_now().await;
         }

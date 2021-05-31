@@ -21,7 +21,6 @@ use self::{
     co_task::{CoTask, Executor},
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
-    window::Window,
 };
 use alloc::format;
 use bootloader::{
@@ -29,6 +28,7 @@ use bootloader::{
     entry_point, BootInfo,
 };
 use core::{mem, panic::PanicInfo};
+use framed_window::FramedWindow;
 use futures_util::StreamExt;
 use sync::{mpsc, OnceCell};
 use x86_64::VirtAddr;
@@ -44,6 +44,7 @@ mod emergency_console;
 mod error;
 mod font;
 mod framebuffer;
+mod framed_window;
 mod gdt;
 mod graphics;
 mod interrupt;
@@ -184,22 +185,19 @@ fn start_window() -> ! {
 
 async fn task_b() {
     let res = async {
-        let mut window = Window::builder()
+        let mut window = FramedWindow::builder("TaskB Window".into())
             .pos(Point::new(100, 100))
-            .size(Size::new(160, 52))
-            .draggable(true)
-            .height(usize::MAX)
+            .size(Size::new(152, 24))
             .build()?;
-        window::draw_window(&mut window, "TaskB Window");
         window.flush().await?;
 
         for i in 0.. {
             window.fill_rect(
-                Rectangle::new(Point::new(24, 28), Size::new(8 * 10, 16)),
+                Rectangle::new(Point::new(20, 4), Size::new(8 * 10, 16)),
                 Color::from_code(0xc6c6c6),
             );
             let s = format!("{:010}", i);
-            font::draw_str(&mut window, Point::new(24, 28), &s, Color::BLACK);
+            font::draw_str(&mut window, Point::new(20, 4), &s, Color::BLACK);
             window.flush().await?;
         }
 

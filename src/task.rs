@@ -117,10 +117,10 @@ impl TaskManager {
             tasks,
             current_task_id,
             wake_queue: [
-                VecDeque::new(),
-                VecDeque::new(),
-                VecDeque::new(),
-                VecDeque::new(),
+                VecDeque::with_capacity(1),
+                VecDeque::with_capacity(1),
+                VecDeque::with_capacity(1),
+                VecDeque::with_capacity(1),
             ],
         }
     }
@@ -129,6 +129,10 @@ impl TaskManager {
         let task_id = task.id;
         if self.tasks.insert(task_id, task).is_some() {
             panic!("task with same ID already in tasks")
+        }
+        // avoid memory allocation during task switching
+        for queue in self.wake_queue.iter_mut() {
+            queue.reserve_exact(self.tasks.len() - queue.len());
         }
     }
 

@@ -13,8 +13,9 @@ resolver = "2"
 # [profile.dev]
 # panic = "abort"
 
-# [profile.release]
+[profile.release]
 # panic = "abort"
+debug = true
 
 [dependencies]
 arrayvec = { version = "0.7.0", default-features = false }

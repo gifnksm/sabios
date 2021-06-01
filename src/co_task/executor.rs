@@ -91,10 +91,8 @@ impl Executor {
         interrupts::disable();
         if self.task_queue.is_empty() {
             task::sleep(self.task_id);
-            interrupts::enable();
-        } else {
-            interrupts::enable();
         }
+        interrupts::enable();
     }
 }
 

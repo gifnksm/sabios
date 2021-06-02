@@ -19,16 +19,14 @@ use crate::task::Task;
 
 use self::{
     co_task::{CoTask, Executor},
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    graphics::Point,
     prelude::*,
 };
-use alloc::format;
 use bootloader::{
     boot_info::{FrameBuffer, Optional},
     entry_point, BootInfo,
 };
 use core::{mem, panic::PanicInfo};
-use framed_window::FramedWindow;
 use futures_util::StreamExt;
 use sync::{mpsc, OnceCell};
 use x86_64::VirtAddr;
@@ -38,6 +36,7 @@ mod allocator;
 mod buffer_drawer;
 mod co_task;
 mod console;
+mod counter_window;
 mod cxx_support;
 mod desktop;
 mod emergency_console;
@@ -51,7 +50,6 @@ mod interrupt;
 mod keyboard;
 mod layer;
 mod log;
-mod main_window;
 mod memory;
 mod mouse;
 mod paging;
@@ -152,9 +150,15 @@ fn start_window() -> ! {
         }
     }));
 
-    task::spawn(Task::new(main_window::handler_task()));
+    task::spawn(Task::new(counter_window::handler_task(
+        "Hello Window".into(),
+        Point::new(300, 100),
+    )));
     task::spawn(Task::new(text_window::handler_task()));
-    let task_b_id = task::spawn(Task::new(task_b()));
+    let task_b_id = task::spawn(Task::new(counter_window::handler_task(
+        "TaskB Window".into(),
+        Point::new(100, 100),
+    )));
 
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);
@@ -181,36 +185,6 @@ fn start_window() -> ! {
     println!("Welcome to sabios!");
 
     executor.run();
-}
-
-async fn task_b() {
-    let res = async {
-        let mut window = FramedWindow::builder("TaskB Window".into())
-            .pos(Point::new(100, 100))
-            .size(Size::new(152, 24))
-            .build()?;
-        window.flush().await?;
-
-        for i in 0.. {
-            window.fill_rect(
-                Rectangle::new(Point::new(20, 4), Size::new(8 * 10, 16)),
-                Color::from_code(0xc6c6c6),
-            );
-            let s = format!("{:010}", i);
-            font::draw_str(&mut window, Point::new(20, 4), &s, Color::BLACK);
-            window.flush().await?;
-        }
-
-        Ok::<(), Error>(())
-    }
-    .await;
-
-    if let Err(err) = res {
-        panic!(
-            "error occurred during handling task b window event: {}",
-            err
-        );
-    }
 }
 
 fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr, VirtAddr)> {

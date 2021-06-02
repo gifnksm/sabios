@@ -4,13 +4,13 @@ use crate::{
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
 };
-use alloc::format;
+use alloc::{format, string::String};
 
-pub(crate) async fn handler_task() {
+pub(crate) async fn handler_task(title: String, pos: Point<i32>) {
     let res = async {
-        let mut window = FramedWindow::builder("Hello Window".into())
-            .pos(Point::new(300, 100))
-            .size(Size::new(150, 24))
+        let mut window = FramedWindow::builder(title)
+            .pos(pos)
+            .size(Size::new(152, 24))
             .build()?;
         window.flush().await?;
 
@@ -30,6 +30,9 @@ pub(crate) async fn handler_task() {
     .await;
 
     if let Err(err) = res {
-        panic!("error occurred during handling main window event: {}", err);
+        panic!(
+            "error occurred during handling counter window event: {}",
+            err
+        );
     }
 }

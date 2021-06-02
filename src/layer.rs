@@ -2,6 +2,7 @@ use crate::{
     buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
     framebuffer::{self, ScreenInfo},
     graphics::{Color, Draw, Offset, Point, Rectangle, Size},
+    keyboard::KeyboardEvent,
     mouse::{MouseButton, MouseEvent},
     prelude::*,
     sync::{mpsc, oneshot, MutexGuard, OnceCell},
@@ -296,6 +297,13 @@ impl LayerManager {
         }
         Ok(())
     }
+
+    fn notify_keyboard_event(&self, layer_id: LayerId, event: KeyboardEvent) -> Result<()> {
+        if let Some(layer) = self.layers.get(&layer_id) {
+            layer.send_event(WindowEvent::Keyboard(event))?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -307,6 +315,10 @@ struct ActiveLayer {
 impl ActiveLayer {
     fn new() -> Self {
         Self::default()
+    }
+
+    fn active_layer(&self) -> Option<LayerId> {
+        self.active_layer
     }
 
     fn set_mouse_layer(&mut self, layer_manager: &mut LayerManager, layer_id: Option<LayerId>) {
@@ -328,7 +340,9 @@ impl ActiveLayer {
         }
 
         if let Some(layer_id) = self.active_layer {
-            let _ = layer_manager.notify_deactivated(layer_id);
+            if let Err(err) = layer_manager.notify_deactivated(layer_id) {
+                warn!("failed to notify_deactivated: {}", err);
+            }
             layer_manager.draw_layer(layer_id);
         }
 
@@ -337,7 +351,9 @@ impl ActiveLayer {
         if let Some(layer_id) = self.active_layer {
             let height = self.active_height(layer_manager);
             layer_manager.set_layer_height(layer_id, height);
-            let _ = layer_manager.notify_activated(layer_id);
+            if let Err(err) = layer_manager.notify_activated(layer_id) {
+                warn!("failed to notify_activated: {}", err);
+            }
             layer_manager.draw_layer(layer_id);
         }
     }
@@ -376,12 +392,17 @@ enum LayerEvent {
         event: MouseEvent,
         tx: oneshot::Sender<()>,
     },
+    KeyboardEvent {
+        event: KeyboardEvent,
+        tx: oneshot::Sender<()>,
+    },
 }
 
 #[derive(Debug)]
 pub(crate) enum WindowEvent {
     Activated,
     Deactivated,
+    Keyboard(KeyboardEvent),
 }
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();
@@ -443,6 +464,13 @@ impl EventSender {
         rx.await;
         Ok(())
     }
+
+    pub(crate) async fn keyboard_event(&self, event: KeyboardEvent) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.send(LayerEvent::KeyboardEvent { event, tx })?;
+        rx.await;
+        Ok(())
+    }
 }
 
 pub(crate) fn handler_task() -> impl Future<Output = ()> {
@@ -496,6 +524,16 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                                 .filter(|layer| layer.draggable)
                                 .map(|layer| layer.id());
                             am.activate(&mut lm, drag_layer_id);
+                        }
+                        tx.send(());
+                    }
+                    LayerEvent::KeyboardEvent { event, tx } => {
+                        if let Some(layer_id) = am.active_layer() {
+                            if let Err(err) = lm.notify_keyboard_event(layer_id, event) {
+                                warn!("failed to notify_keyboard_event: {}", err);
+                            }
+                        } else {
+                            crate::println!("key push not handled: {:?}", event);
                         }
                         tx.send(());
                     }

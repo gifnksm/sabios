@@ -1,6 +1,6 @@
 use crate::{
     co_task, font,
-    framed_window::FramedWindow,
+    framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
 };
@@ -24,7 +24,9 @@ pub(crate) async fn handler_task(title: String, pos: Point<i32>) {
                         Some(Err(err)) => bail!(err),
                         None => break 'outer,
                     };
-                    match event {}
+                    match event {
+                        FramedWindowEvent::Keyboard(_) => {}
+                    }
                 }
                 _ = co_task::yield_now().fuse() => {
                     window.fill_rect(

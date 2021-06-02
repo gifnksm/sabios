@@ -163,10 +163,8 @@ fn start_window() -> ! {
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);
     executor.spawn(CoTask::new(async move {
-        let tx = text_window::sender();
+        let layer_tx = layer::event_tx();
         while let Some(event) = rx.next().await {
-            #[allow(clippy::unwrap_used)]
-            tx.send(event).unwrap();
             match event.ascii {
                 's' => {
                     x86_64::instructions::interrupts::without_interrupts(|| task::sleep(task_b_id));
@@ -176,6 +174,8 @@ fn start_window() -> ! {
                 }
                 _ => {}
             }
+            #[allow(clippy::unwrap_used)]
+            layer_tx.keyboard_event(event).await.unwrap();
         }
     }));
 

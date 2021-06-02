@@ -1,6 +1,7 @@
 use crate::{
     font,
     graphics::{Color, Draw, Point, Rectangle, Size},
+    keyboard::KeyboardEvent,
     layer::WindowEvent,
     prelude::*,
     window::{self, Window},
@@ -52,7 +53,9 @@ impl Builder {
 }
 
 #[derive(Debug)]
-pub(crate) enum FramedWindowEvent {}
+pub(crate) enum FramedWindowEvent {
+    Keyboard(KeyboardEvent),
+}
 
 #[derive(Debug)]
 pub(crate) struct FramedWindow {
@@ -106,6 +109,9 @@ impl FramedWindow {
                         return Some(Err(err));
                     }
                     continue;
+                }
+                WindowEvent::Keyboard(event) => {
+                    return Some(Ok(FramedWindowEvent::Keyboard(event)))
                 }
             }
         }

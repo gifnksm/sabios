@@ -380,3 +380,43 @@ pub(crate) trait Draw {
     }
 }
 static_assertions::assert_obj_safe!(Draw);
+
+pub(crate) fn draw_box<D>(
+    drawer: &mut D,
+    area: Rectangle<i32>,
+    background: Color,
+    border_top_left: Color,
+    border_bottom_right: Color,
+) where
+    D: Draw,
+{
+    // fill main box
+    drawer.fill_rect(
+        Rectangle::new(area.pos + Offset::new(1, 1), area.size - Offset::new(2, 2)),
+        background,
+    );
+
+    // draw border lines
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(area.size.x, 1)),
+        border_top_left,
+    );
+    drawer.fill_rect(
+        Rectangle::new(area.pos, Size::new(1, area.size.y)),
+        border_top_left,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(0, area.size.y),
+            Size::new(area.size.x, 1),
+        ),
+        border_bottom_right,
+    );
+    drawer.fill_rect(
+        Rectangle::new(
+            area.pos + Offset::new(area.size.x, 0),
+            Size::new(1, area.size.y),
+        ),
+        border_bottom_right,
+    );
+}

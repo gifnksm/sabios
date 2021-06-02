@@ -17,10 +17,13 @@ extern crate alloc;
 
 use self::{
     co_task::{CoTask, Executor},
-    graphics::Point,
+    counter_window::CounterWindow,
+    graphics::{Point, Size},
     prelude::*,
+    task::Task,
+    terminal::Terminal,
+    text_window::TextWindow,
 };
-use crate::task::Task;
 use bootloader::{
     boot_info::{FrameBuffer, Optional},
     entry_point, BootInfo,
@@ -56,6 +59,7 @@ mod prelude;
 mod serial;
 mod sync;
 mod task;
+mod terminal;
 mod text_window;
 mod timer;
 mod triple_buffer;
@@ -148,14 +152,37 @@ fn start_window() -> ! {
         }
     }));
 
+    #[allow(clippy::unwrap_used)]
     task::spawn(Task::new(
-        counter_window::handler_task("Hello Window".into(), Point::new(300, 100)).unwrap(),
+        CounterWindow::new("Hello Window".into(), Point::new(300, 100))
+            .unwrap()
+            .run()
+            .unwrap(),
     ));
+    #[allow(clippy::unwrap_used)]
     task::spawn(Task::new(
-        text_window::handler_task("Text Box test".into(), Point::new(350, 200)).unwrap(),
+        TextWindow::new("Text Box test".into(), Point::new(500, 100))
+            .unwrap()
+            .run()
+            .unwrap(),
     ));
+    #[allow(clippy::unwrap_used)]
     let task_b_id = task::spawn(Task::new(
-        counter_window::handler_task("TaskB Window".into(), Point::new(100, 100)).unwrap(),
+        CounterWindow::new("TaskB Window".into(), Point::new(100, 100))
+            .unwrap()
+            .run()
+            .unwrap(),
+    ));
+    #[allow(clippy::unwrap_used)]
+    task::spawn(Task::new(
+        Terminal::new(
+            "sabios Terminal".into(),
+            Point::new(100, 200),
+            Size::new(60, 15),
+        )
+        .unwrap()
+        .run()
+        .unwrap(),
     ));
 
     let (tx, mut rx) = mpsc::channel(100);

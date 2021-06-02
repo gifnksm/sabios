@@ -1,5 +1,4 @@
 use crate::{
-    font,
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{self, Color, Draw, Offset, Point, Rectangle, Size},
     prelude::*,
@@ -8,38 +7,33 @@ use crate::{
 use alloc::string::String;
 use futures_util::select_biased;
 
-const BACKGROUND: Color = Color::WHITE;
+const BACKGROUND: Color = Color::BLACK;
 const BORDER_DARK: Color = Color::from_code(0x848484);
 const BORDER_LIGHT: Color = Color::from_code(0xc6c6c6);
 
 #[derive(Debug)]
-pub(crate) struct TextWindow {
-    window: FramedWindow,
-    index: i32,
-    max_chars: i32,
+pub(crate) struct Terminal {
+    text_size: Size<i32>,
+    cursor: Point<i32>,
     cursor_visible: bool,
+    window: FramedWindow,
 }
 
-impl TextWindow {
-    pub(crate) fn new(title: String, pos: Point<i32>) -> Result<Self> {
-        let window_size = Size::new(160, 24);
+impl Terminal {
+    pub(crate) fn new(title: String, pos: Point<i32>, text_size: Size<i32>) -> Result<Self> {
         let window = FramedWindow::builder(title)
-            .size(window_size)
             .pos(pos)
+            .size(Size::new(text_size.x * 8, text_size.y * 16))
             .build()?;
         Ok(Self {
+            text_size,
+            cursor: Point::new(0, 0),
+            cursor_visible: false,
             window,
-            index: 0,
-            max_chars: (window_size.x - 8) / 8 - 1,
-            cursor_visible: true,
         })
     }
 
-    fn insert_pos(&self) -> Point<i32> {
-        Point::new(4 + 8 * self.index, 6)
-    }
-
-    fn draw_text_box(&mut self) {
+    fn draw_terminal(&mut self) {
         let area = self.window.area();
         graphics::draw_box(
             &mut self.window,
@@ -47,11 +41,15 @@ impl TextWindow {
             BACKGROUND,
             BORDER_DARK,
             BORDER_LIGHT,
-        );
+        )
+    }
+
+    fn insert_pos(&self) -> Point<i32> {
+        Point::new(4 + 8 * self.cursor.x, 6 + 16 * self.cursor.y)
     }
 
     fn draw_cursor(&mut self, visible: bool) {
-        let color = if visible { Color::BLACK } else { Color::WHITE };
+        let color = if visible { Color::WHITE } else { Color::BLACK };
         let pos = self.insert_pos() - Offset::new(0, 1);
         self.window
             .fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
@@ -59,27 +57,7 @@ impl TextWindow {
 
     fn handle_event(&mut self, event: FramedWindowEvent) {
         match event {
-            FramedWindowEvent::Keyboard(event) => {
-                if event.ascii == '\0' {
-                    return;
-                }
-
-                if event.ascii == '\x08' && self.index > 0 {
-                    self.draw_cursor(false);
-                    self.index -= 1;
-                    self.window.fill_rect(
-                        Rectangle::new(self.insert_pos(), Size::new(8, 16)),
-                        Color::WHITE,
-                    );
-                    self.draw_cursor(self.cursor_visible);
-                } else if event.ascii >= ' ' && self.index < self.max_chars {
-                    self.draw_cursor(false);
-                    let pos = self.insert_pos();
-                    font::draw_char(&mut self.window, pos, event.ascii, Color::BLACK);
-                    self.index += 1;
-                    self.draw_cursor(self.cursor_visible);
-                }
-            }
+            FramedWindowEvent::Keyboard(_) => {}
         }
     }
 
@@ -89,7 +67,7 @@ impl TextWindow {
     }
 
     pub(crate) async fn run(mut self) -> Result<()> {
-        self.draw_text_box();
+        self.draw_terminal();
         self.window.flush().await?;
 
         let mut interval = timer::lapic::interval(0, 50)?;

@@ -117,6 +117,18 @@ pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
 
         let tx = layer::event_tx();
 
+        // send dummy mouse event to notify cursor_layer_id
+        tx.mouse_event(
+            cursor_layer_id,
+            MouseEvent {
+                down: BitFlags::empty(),
+                up: BitFlags::empty(),
+                pos: cursor_pos,
+                pos_diff: Offset::new(0, 0),
+            },
+        )
+        .await?;
+
         let mut buttons = BitFlags::empty();
         while let Some(event) = rx.next().await {
             let prev_cursor_pos = cursor_pos;

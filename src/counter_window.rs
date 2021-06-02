@@ -8,18 +8,17 @@ use alloc::{format, string::String};
 use futures_util::select_biased;
 
 #[derive(Debug)]
-struct CounterWindow {
+pub(crate) struct CounterWindow {
     window: FramedWindow,
     count: usize,
 }
 
 impl CounterWindow {
-    async fn new(title: String, pos: Point<i32>) -> Result<Self> {
-        let mut window = FramedWindow::builder(title)
+    pub(crate) fn new(title: String, pos: Point<i32>) -> Result<Self> {
+        let window = FramedWindow::builder(title)
             .pos(pos)
             .size(Size::new(152, 25))
             .build()?;
-        window.flush().await?;
         Ok(Self { window, count: 0 })
     }
 
@@ -39,7 +38,9 @@ impl CounterWindow {
         self.count += 1;
     }
 
-    async fn run(&mut self) -> Result<()> {
+    pub(crate) async fn run(mut self) -> Result<()> {
+        self.window.flush().await?;
+
         loop {
             select_biased! {
                 event = self.window.recv_event().fuse() => {
@@ -54,8 +55,4 @@ impl CounterWindow {
             self.window.flush().await?;
         }
     }
-}
-
-pub(crate) async fn handler_task(title: String, pos: Point<i32>) -> Result<()> {
-    CounterWindow::new(title, pos).await?.run().await
 }

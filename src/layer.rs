@@ -241,7 +241,15 @@ impl LayerManager {
         }
     }
 
-    fn set_height(&mut self, id: LayerId, height: usize) {
+    fn height(&self) -> usize {
+        self.layer_stack.len()
+    }
+
+    fn layer_height(&self, id: LayerId) -> Option<usize> {
+        self.layer_stack.iter().position(|elem| *elem == id)
+    }
+
+    fn set_layer_height(&mut self, id: LayerId, height: usize) {
         if !self.layers.contains_key(&id) {
             return;
         }
@@ -267,6 +275,56 @@ impl LayerManager {
                         .unwrap_or(false)
                 })
             })
+    }
+}
+
+#[derive(Debug, Default)]
+struct ActiveLayer {
+    active_layer: Option<LayerId>,
+    mouse_layer: Option<LayerId>,
+}
+
+impl ActiveLayer {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn set_mouse_layer(&mut self, layer_manager: &mut LayerManager, layer_id: Option<LayerId>) {
+        self.mouse_layer = layer_id;
+        if let Some(layer_id) = self.mouse_layer {
+            let height = layer_manager.height();
+            layer_manager.set_layer_height(layer_id, height);
+        }
+        if let Some(layer_id) = self.active_layer {
+            let height = self.active_height(layer_manager);
+            layer_manager.set_layer_height(layer_id, height);
+            layer_manager.draw_layer(layer_id);
+        }
+    }
+
+    fn activate(&mut self, layer_manager: &mut LayerManager, layer_id: Option<LayerId>) {
+        if self.active_layer == layer_id {
+            return;
+        }
+
+        if let Some(layer_id) = self.active_layer {
+            layer_manager.draw_layer(layer_id);
+        }
+
+        self.active_layer = layer_id;
+
+        if let Some(layer_id) = self.active_layer {
+            let height = self.active_height(layer_manager);
+            layer_manager.set_layer_height(layer_id, height);
+            layer_manager.draw_layer(layer_id);
+        }
+    }
+
+    fn active_height(&self, layer_manager: &mut LayerManager) -> usize {
+        self.mouse_layer
+            .and_then(|layer_id| layer_manager.layer_height(layer_id))
+            .map(|mouse_height| mouse_height - 1)
+            .unwrap_or_else(|| layer_manager.height())
     }
 }
 
@@ -367,6 +425,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
     async move {
         let res = async {
             let mut lm = LayerManager::new()?;
+            let mut am = ActiveLayer::new();
 
             let mut drag_layer_id = None;
             while let Some(event) = rx.next().await {
@@ -380,13 +439,16 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                         lm.move_to(layer_id, pos);
                         tx.send(());
                     }
-                    LayerEvent::SetHeight { layer_id, height } => lm.set_height(layer_id, height),
+                    LayerEvent::SetHeight { layer_id, height } => {
+                        lm.set_layer_height(layer_id, height)
+                    }
                     // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
                     LayerEvent::MouseEvent {
                         cursor_layer_id,
                         event,
                         tx,
                     } => {
+                        am.set_mouse_layer(&mut lm, Some(cursor_layer_id));
                         let MouseEvent {
                             down,
                             up,
@@ -405,6 +467,7 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
                                 .find(|layer| layer.id != cursor_layer_id)
                                 .filter(|layer| layer.draggable)
                                 .map(|layer| layer.id());
+                            am.activate(&mut lm, drag_layer_id);
                         }
                         tx.send(());
                     }

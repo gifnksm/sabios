@@ -1,10 +1,12 @@
 use crate::{
     framebuffer,
     graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, EventSender, Layer, LayerBuffer, LayerId},
+    layer::{self, EventSender, Layer, LayerBuffer, LayerId, WindowEvent},
     prelude::*,
+    sync::mpsc,
     triple_buffer::{self, Producer},
 };
+use futures_util::StreamExt;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Builder {
@@ -57,7 +59,8 @@ impl Builder {
         buffer.set_transparent_color(self.transparent_color);
 
         let (producer, consumer) = triple_buffer::new(buffer.clone());
-        let mut layer = Layer::new(consumer);
+        let (tx, rx) = mpsc::channel(100);
+        let mut layer = Layer::new(consumer, tx);
         let layer_id = layer.id();
         let event_tx = layer::event_tx();
 
@@ -80,6 +83,7 @@ impl Builder {
             event_tx,
             buffer,
             producer,
+            rx,
         })
     }
 }
@@ -90,6 +94,7 @@ pub(crate) struct Window {
     event_tx: EventSender,
     buffer: LayerBuffer,
     producer: Producer<LayerBuffer>,
+    rx: mpsc::Receiver<WindowEvent>,
 }
 
 impl Window {
@@ -111,6 +116,10 @@ impl Window {
         });
         self.producer.store();
         self.event_tx.draw_layer(self.layer_id).await
+    }
+
+    pub(crate) async fn recv_event(&mut self) -> Option<WindowEvent> {
+        self.rx.next().await
     }
 }
 

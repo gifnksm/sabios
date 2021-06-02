@@ -1,6 +1,7 @@
 use crate::{
     font,
     graphics::{Color, Draw, Point, Rectangle, Size},
+    layer::WindowEvent,
     prelude::*,
     window::{self, Window},
 };
@@ -42,6 +43,7 @@ impl Builder {
         let window = self.inner.build()?;
         let mut window = FramedWindow {
             title: self.title,
+            active: false,
             window,
         };
         window.draw_frame();
@@ -50,8 +52,12 @@ impl Builder {
 }
 
 #[derive(Debug)]
+pub(crate) enum FramedWindowEvent {}
+
+#[derive(Debug)]
 pub(crate) struct FramedWindow {
     title: String,
+    active: bool,
     window: Window,
 }
 
@@ -85,6 +91,46 @@ impl Draw for FramedWindow {
     }
 }
 
+impl FramedWindow {
+    pub(crate) async fn recv_event(&mut self) -> Option<Result<FramedWindowEvent>> {
+        while let Some(event) = self.window.recv_event().await {
+            match event {
+                WindowEvent::Activated => {
+                    if let Err(err) = self.activate().await {
+                        return Some(Err(err));
+                    }
+                    continue;
+                }
+                WindowEvent::Deactivated => {
+                    if let Err(err) = self.deactivate().await {
+                        return Some(Err(err));
+                    }
+                    continue;
+                }
+            }
+        }
+        None
+    }
+
+    async fn activate(&mut self) -> Result<()> {
+        if !self.active {
+            self.draw_title_bar(true);
+            self.active = true;
+            self.flush().await?;
+        }
+        Ok(())
+    }
+
+    async fn deactivate(&mut self) -> Result<()> {
+        if self.active {
+            self.draw_title_bar(false);
+            self.active = false;
+            self.flush().await?;
+        }
+        Ok(())
+    }
+}
+
 const CLOSE_BUTTON_WIDTH: usize = 16;
 const CLOSE_BUTTON_HEIGHT: usize = 14;
 const CLOSE_BUTTON: [[u8; CLOSE_BUTTON_WIDTH]; CLOSE_BUTTON_HEIGHT] = [
@@ -106,7 +152,8 @@ const CLOSE_BUTTON: [[u8; CLOSE_BUTTON_WIDTH]; CLOSE_BUTTON_HEIGHT] = [
 
 const EDGE_DARK: Color = Color::from_code(0x848484);
 const EDGE_LIGHT: Color = Color::from_code(0xc6c6c6);
-const BACKGROUND: Color = Color::from_code(0x000084);
+const ACTIVE_BACKGROUND: Color = Color::from_code(0x000084);
+const INACTIVE_BACKGROUND: Color = Color::from_code(0x848484);
 
 impl FramedWindow {
     pub(crate) fn builder(title: String) -> Builder {
@@ -129,7 +176,6 @@ impl FramedWindow {
             ((wx - 2, 1), (1, wy - 2), EDGE_DARK),
             ((wx - 1, 0), (1, wy), Color::BLACK),
             ((2, 2), (wx - 4, wy - 4), EDGE_LIGHT),
-            ((3, 3), (wx - 6, 18), BACKGROUND),
             ((1, wy - 2), (wx - 2, 1), EDGE_DARK),
             ((0, wy - 1), (wx, 1), Color::BLACK),
         ];
@@ -141,6 +187,23 @@ impl FramedWindow {
             );
         }
 
+        self.draw_title_bar(false);
+    }
+
+    fn draw_title_bar(&mut self, active: bool) {
+        let win_size = self.window.size();
+        let (wx, _wy) = (win_size.x, win_size.y);
+
+        let background = if active {
+            ACTIVE_BACKGROUND
+        } else {
+            INACTIVE_BACKGROUND
+        };
+
+        self.window.fill_rect(
+            Rectangle::new(Point::new(3, 3), Size::new(wx - 6, 18)),
+            background,
+        );
         font::draw_str(
             &mut self.window,
             Point::new(24, 4),

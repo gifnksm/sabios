@@ -95,15 +95,17 @@ pub(crate) struct Layer {
     pos: Point<i32>,
     draggable: bool,
     consumer: Consumer<LayerBuffer>,
+    tx: mpsc::Sender<WindowEvent>,
 }
 
 impl Layer {
-    pub(crate) fn new(consumer: Consumer<LayerBuffer>) -> Self {
+    pub(crate) fn new(consumer: Consumer<LayerBuffer>, tx: mpsc::Sender<WindowEvent>) -> Self {
         Self {
             id: LayerId::new(),
             pos: Point::new(0, 0),
             draggable: false,
             consumer,
+            tx,
         }
     }
 
@@ -139,6 +141,10 @@ impl Layer {
         self.consumer
             .buffer()
             .draw_to(drawer, src_dst_offset, src_area);
+    }
+
+    fn send_event(&self, event: WindowEvent) -> Result<()> {
+        self.tx.send(event)
     }
 }
 
@@ -276,6 +282,20 @@ impl LayerManager {
                 })
             })
     }
+
+    fn notify_activated(&self, layer_id: LayerId) -> Result<()> {
+        if let Some(layer) = self.layers.get(&layer_id) {
+            layer.send_event(WindowEvent::Activated)?;
+        }
+        Ok(())
+    }
+
+    fn notify_deactivated(&self, layer_id: LayerId) -> Result<()> {
+        if let Some(layer) = self.layers.get(&layer_id) {
+            layer.send_event(WindowEvent::Deactivated)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -308,6 +328,7 @@ impl ActiveLayer {
         }
 
         if let Some(layer_id) = self.active_layer {
+            let _ = layer_manager.notify_deactivated(layer_id);
             layer_manager.draw_layer(layer_id);
         }
 
@@ -316,6 +337,7 @@ impl ActiveLayer {
         if let Some(layer_id) = self.active_layer {
             let height = self.active_height(layer_manager);
             layer_manager.set_layer_height(layer_id, height);
+            let _ = layer_manager.notify_activated(layer_id);
             layer_manager.draw_layer(layer_id);
         }
     }
@@ -354,6 +376,12 @@ enum LayerEvent {
         event: MouseEvent,
         tx: oneshot::Sender<()>,
     },
+}
+
+#[derive(Debug)]
+pub(crate) enum WindowEvent {
+    Activated,
+    Deactivated,
 }
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();

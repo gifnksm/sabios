@@ -48,12 +48,20 @@ pub(crate) fn handler_task() -> impl Future<Output = ()> {
             };
             let mut interval = timer::lapic::interval(0, 50)?;
             let mut cursor_visible = true;
-            loop {
+            'outer: loop {
                 select_biased! {
+                    event = window.recv_event().fuse() => {
+                        let event = match event {
+                            Some(Ok(event)) => event,
+                            Some(Err(err)) => bail!(err),
+                            None => break 'outer,
+                        };
+                        match event {}
+                    }
                     event = rx.next().fuse() => {
                         let event = match event {
                             Some(event) => event,
-                            None => break,
+                            None => break 'outer,
                         };
                         if event.ascii == '\0' {
                             continue;

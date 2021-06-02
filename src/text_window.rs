@@ -5,85 +5,112 @@ use crate::{
     prelude::*,
     timer,
 };
-use futures_util::{select_biased, FutureExt, StreamExt};
+use alloc::string::String;
+use futures_util::select_biased;
 
-pub(crate) async fn handler_task() {
-    let res = async {
+#[derive(Debug)]
+struct TextWindow {
+    window: FramedWindow,
+    index: i32,
+    max_chars: i32,
+    cursor_visible: bool,
+}
+
+impl TextWindow {
+    async fn new(title: String, pos: Point<i32>) -> Result<Self> {
         let window_size = Size::new(160, 24);
-        let mut window = FramedWindow::builder("Text Box Test".into())
+        let mut window = FramedWindow::builder(title)
             .size(window_size)
-            .pos(Point::new(350, 200))
+            .pos(pos)
             .build()?;
-
         draw_text_box(
             &mut window,
             Rectangle::new(Point::new(0, 0), Size::new(window_size.x, window_size.y)),
         );
         window.flush().await?;
 
-        let mut index = 0;
-        let max_chars = (window_size.x - 8) / 8 - 1;
-        let pos = |index| Point::new(4 + 8 * index, 6);
-        let draw_cursor = |window: &mut FramedWindow, index, visible| {
-            let color = if visible { Color::BLACK } else { Color::WHITE };
-            let pos = pos(index) - Offset::new(0, 1);
-            window.fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
-        };
+        Ok(Self {
+            window,
+            index: 0,
+            max_chars: (window_size.x - 8) / 8 - 1,
+            cursor_visible: true,
+        })
+    }
+
+    fn insert_pos(&self) -> Point<i32> {
+        Point::new(4 + 8 * self.index, 6)
+    }
+
+    fn draw_cursor(&mut self, visible: bool) {
+        let color = if visible { Color::BLACK } else { Color::WHITE };
+        let pos = self.insert_pos() - Offset::new(0, 1);
+        self.window
+            .fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
+    }
+
+    fn handle_event(&mut self, event: FramedWindowEvent) {
+        match event {
+            FramedWindowEvent::Keyboard(event) => {
+                if event.ascii == '\0' {
+                    return;
+                }
+
+                if event.ascii == '\x08' && self.index > 0 {
+                    self.draw_cursor(false);
+                    self.index -= 1;
+                    self.window.fill_rect(
+                        Rectangle::new(self.insert_pos(), Size::new(8, 16)),
+                        Color::WHITE,
+                    );
+                    self.draw_cursor(self.cursor_visible);
+                } else if event.ascii >= ' ' && self.index < self.max_chars {
+                    self.draw_cursor(false);
+                    let pos = self.insert_pos();
+                    font::draw_char(&mut self.window, pos, event.ascii, Color::BLACK);
+                    self.index += 1;
+                    self.draw_cursor(self.cursor_visible);
+                }
+            }
+        }
+    }
+
+    fn handle_timeout(&mut self) {
+        self.cursor_visible = !self.cursor_visible;
+        self.draw_cursor(self.cursor_visible);
+    }
+
+    async fn run(&mut self) -> Result<()> {
         let mut interval = timer::lapic::interval(0, 50)?;
-        let mut cursor_visible = true;
-        'outer: loop {
+        loop {
             select_biased! {
-                event = window.recv_event().fuse() => {
+                event = self.window.recv_event().fuse() => {
                     let event = match event {
-                        Some(Ok(event)) => event,
-                        Some(Err(err)) => bail!(err),
-                        None => break 'outer,
+                        Some(event) => event?,
+                        None => return Ok(()),
                     };
-                    match event {
-                        FramedWindowEvent::Keyboard(event) => {
-                            if event.ascii == '\0' {
-                                continue;
-                            }
-                            if event.ascii == '\x08' && index > 0 {
-                                draw_cursor(&mut window, index, false);
-                                index -= 1;
-                                window
-                                    .fill_rect(Rectangle::new(pos(index), Size::new(8, 16)), Color::WHITE);
-                                draw_cursor(&mut window, index, cursor_visible);
-                            } else if event.ascii >= ' ' && index < max_chars {
-                                draw_cursor(&mut window, index, false);
-                                font::draw_char(&mut window, pos(index), event.ascii, Color::BLACK);
-                                index += 1;
-                                draw_cursor(&mut window, index, cursor_visible);
-                            }
-                        }
-                    }
+                    self.handle_event(event);
                 }
                 timeout = interval.next().fuse() => {
                     let _timeout = match timeout {
-                        Some(Ok(timeout)) => timeout,
-                        _ => break,
+                        Some(event) => event?,
+                        _ => return Ok(()),
                     };
-                    cursor_visible = !cursor_visible;
-                        draw_cursor(&mut window, index, cursor_visible);
+                    self.handle_timeout();
                 }
             }
-            window.flush().await?;
+            self.window.flush().await?;
         }
-
-        Ok::<(), Error>(())
     }
-    .await;
+}
 
-    if let Err(err) = res {
-        panic!("error occurred during handling text window event: {}", err);
-    }
+pub(crate) async fn handler_task(title: String, pos: Point<i32>) -> Result<()> {
+    TextWindow::new(title, pos).await?.run().await
 }
 
 const EDGE_DARK: Color = Color::from_code(0x848484);
 const EDGE_LIGHT: Color = Color::from_code(0xc6c6c6);
 
-pub(crate) fn draw_text_box<D>(drawer: &mut D, area: Rectangle<i32>)
+fn draw_text_box<D>(drawer: &mut D, area: Rectangle<i32>)
 where
     D: Draw,
 {

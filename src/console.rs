@@ -8,7 +8,6 @@ use crate::{
 };
 use alloc::sync::Arc;
 use core::{convert::TryFrom, fmt};
-use futures_util::StreamExt as _;
 use x86_64::instructions::interrupts;
 
 #[macro_export]
@@ -291,20 +290,13 @@ pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
     Ok(ConsoleInitParam { window, rx })
 }
 
-pub(crate) async fn handler_task(param: ConsoleInitParam) {
-    let res = async {
-        let ConsoleInitParam { window, mut rx } = param;
+pub(crate) async fn handler_task(param: ConsoleInitParam) -> Result<()> {
+    let ConsoleInitParam { window, mut rx } = param;
+    window.lock().flush().await?;
+
+    while let Some(()) = rx.next().await {
         window.lock().flush().await?;
-
-        while let Some(()) = rx.next().await {
-            window.lock().flush().await?;
-        }
-
-        Ok::<(), Error>(())
     }
-    .await;
 
-    if let Err(err) = res {
-        panic!("error occurred during handling console vent: {}", err);
-    }
+    Ok(())
 }

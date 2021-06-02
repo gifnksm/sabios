@@ -4,7 +4,6 @@ use crate::{
 };
 use core::future::Future;
 use enumflags2::{bitflags, BitFlags};
-use futures_util::StreamExt;
 
 const KEYCODE_MAP: [char; 256] = [
     '\0', '\0', '\0', '\0', 'a', 'b', 'c', 'd', // 0
@@ -115,37 +114,30 @@ pub(crate) extern "C" fn observer(modifier: u8, keycode: u8) {
     }
 }
 
-pub(crate) fn handler_task() -> impl Future<Output = ()> {
+pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
     // Initialize KEYBOARD_EVENT_TX before co-task starts
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);
 
     async move {
-        let res = async {
-            let tx = crate::KEYBOARD_EVENT_TX.get();
+        let tx = crate::KEYBOARD_EVENT_TX.get();
 
-            while let Some(event) = rx.next().await {
-                let ascii = if event
-                    .modifier
-                    .intersects(Modifier::LShift | Modifier::RShift)
-                {
-                    KEYCODE_MAP_SHIFT[usize::from(event.keycode)]
-                } else {
-                    KEYCODE_MAP[usize::from(event.keycode)]
-                };
-                let event = KeyboardEvent {
-                    modifier: event.modifier,
-                    keycode: event.keycode,
-                    ascii,
-                };
-                tx.send(event)?;
-            }
-            Ok::<(), Error>(())
+        while let Some(event) = rx.next().await {
+            let ascii = if event
+                .modifier
+                .intersects(Modifier::LShift | Modifier::RShift)
+            {
+                KEYCODE_MAP_SHIFT[usize::from(event.keycode)]
+            } else {
+                KEYCODE_MAP[usize::from(event.keycode)]
+            };
+            let event = KeyboardEvent {
+                modifier: event.modifier,
+                keycode: event.keycode,
+                ascii,
+            };
+            tx.send(event)?;
         }
-        .await;
-
-        if let Err(err) = res {
-            panic!("error occurred during handling keyboard event: {}", err);
-        }
+        Ok(())
     }
 }

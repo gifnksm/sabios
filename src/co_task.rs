@@ -8,8 +8,10 @@ use core::{
 use custom_debug_derive::Debug as CustomDebug;
 
 pub(crate) use self::executor::*;
+pub(crate) use self::traits::*;
 
 mod executor;
+mod traits;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct CoTaskId(u64);

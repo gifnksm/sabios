@@ -8,7 +8,6 @@ use crate::{
 };
 use core::future::Future;
 use enumflags2::{bitflags, BitFlags};
-use futures_util::StreamExt as _;
 
 const TRANSPARENT_COLOR: Color = Color::RED;
 const MOUSE_CURSOR_WIDTH: usize = 15;
@@ -96,63 +95,57 @@ fn draw(drawer: &mut dyn Draw) {
     }
 }
 
-pub(crate) fn handler_task() -> impl Future<Output = ()> {
+pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
     // Initialize MOUSE_EVENT_TX before co-task starts
     let (tx, mut rx) = mpsc::channel(100);
     MOUSE_EVENT_TX.init_once(|| tx);
 
     async move {
-        let res = async {
-            let mut cursor_pos = Point::new(300, 200);
-            let screen_info = *framebuffer::info();
+        let mut cursor_pos = Point::new(300, 200);
+        let screen_info = *framebuffer::info();
 
-            let mut window = Window::builder()
-                .pos(cursor_pos)
-                .size(MOUSE_CURSOR_SIZE)
-                .transparent_color(Some(TRANSPARENT_COLOR))
-                .height(layer::MOUSE_CURSOR_HEIGHT)
-                .build()?;
+        let mut window = Window::builder()
+            .pos(cursor_pos)
+            .size(MOUSE_CURSOR_SIZE)
+            .transparent_color(Some(TRANSPARENT_COLOR))
+            .height(layer::MOUSE_CURSOR_HEIGHT)
+            .build()?;
 
-            let cursor_layer_id = window.layer_id();
-            draw(&mut window);
-            window.flush().await?;
+        let cursor_layer_id = window.layer_id();
+        draw(&mut window);
+        window.flush().await?;
 
-            let tx = layer::event_tx();
+        let tx = layer::event_tx();
 
-            let mut buttons = BitFlags::empty();
-            while let Some(event) = rx.next().await {
-                let prev_cursor_pos = cursor_pos;
-                let prev_buttons = buttons;
+        let mut buttons = BitFlags::empty();
+        while let Some(event) = rx.next().await {
+            let prev_cursor_pos = cursor_pos;
+            let prev_buttons = buttons;
 
-                if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
-                    cursor_pos = pos;
-                }
-                buttons = event.buttons;
-
-                let down = buttons & !prev_buttons;
-                let up = prev_buttons & !buttons;
-                let pos_diff = cursor_pos - prev_cursor_pos;
-
-                if prev_cursor_pos != cursor_pos {
-                    window.move_to(cursor_pos).await?;
-                }
-                tx.mouse_event(
-                    cursor_layer_id,
-                    MouseEvent {
-                        down,
-                        up,
-                        pos: cursor_pos,
-                        pos_diff,
-                    },
-                )
-                .await?;
+            if let Some(pos) = (cursor_pos + event.displacement).clamp(screen_info.area()) {
+                cursor_pos = pos;
             }
+            buttons = event.buttons;
 
-            Ok::<(), Error>(())
+            let down = buttons & !prev_buttons;
+            let up = prev_buttons & !buttons;
+            let pos_diff = cursor_pos - prev_cursor_pos;
+
+            if prev_cursor_pos != cursor_pos {
+                window.move_to(cursor_pos).await?;
+            }
+            tx.mouse_event(
+                cursor_layer_id,
+                MouseEvent {
+                    down,
+                    up,
+                    pos: cursor_pos,
+                    pos_diff,
+                },
+            )
+            .await?;
         }
-        .await;
-        if let Err(err) = res {
-            panic!("error occurred during handling mouse cursor event: {}", err);
-        }
+
+        Ok(())
     }
 }

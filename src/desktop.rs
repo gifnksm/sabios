@@ -28,22 +28,15 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
     );
 }
 
-pub(crate) async fn handler_task() {
-    let res = async {
-        let screen_info = *framebuffer::info();
-        let mut window = Window::builder()
-            .size(screen_info.size)
-            .height(layer::DESKTOP_HEIGHT)
-            .build()?;
+pub(crate) async fn handler_task() -> Result<()> {
+    let screen_info = *framebuffer::info();
+    let mut window = Window::builder()
+        .size(screen_info.size)
+        .height(layer::DESKTOP_HEIGHT)
+        .build()?;
 
-        draw(&mut window, screen_info.size);
-        window.flush().await?;
+    draw(&mut window, screen_info.size);
+    window.flush().await?;
 
-        Ok::<(), Error>(())
-    }
-    .await;
-
-    if let Err(err) = res {
-        panic!("error occurred during handling desktop drawing: {}", err);
-    }
+    Ok(())
 }

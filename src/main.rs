@@ -15,19 +15,17 @@
 
 extern crate alloc;
 
-use crate::task::Task;
-
 use self::{
     co_task::{CoTask, Executor},
     graphics::Point,
     prelude::*,
 };
+use crate::task::Task;
 use bootloader::{
     boot_info::{FrameBuffer, Optional},
     entry_point, BootInfo,
 };
 use core::{mem, panic::PanicInfo};
-use futures_util::StreamExt;
 use sync::{mpsc, OnceCell};
 use x86_64::VirtAddr;
 
@@ -120,7 +118,7 @@ static KEYBOARD_EVENT_TX: OnceCell<mpsc::Sender<keyboard::KeyboardEvent>> = Once
 
 #[allow(clippy::expect_used)]
 fn start_window() -> ! {
-    let layer_task = layer::handler_task();
+    let layer_task = layer::handler_task().unwrap();
     let console_param = console::start_window_mode().expect("failed to start console window mode");
 
     let task_id = task::current().id();
@@ -129,10 +127,10 @@ fn start_window() -> ! {
     let mut executor = Executor::new(task_id);
     executor.spawn(CoTask::new(xhc::handler_task()));
     executor.spawn(CoTask::new(timer::lapic::handler_task()));
-    executor.spawn(CoTask::new(mouse::handler_task()));
-    executor.spawn(CoTask::new(keyboard::handler_task()));
-    executor.spawn(CoTask::new(desktop::handler_task()));
-    executor.spawn(CoTask::new(console::handler_task(console_param)));
+    executor.spawn(CoTask::new(mouse::handler_task().unwrap()));
+    executor.spawn(CoTask::new(keyboard::handler_task().unwrap()));
+    executor.spawn(CoTask::new(desktop::handler_task().unwrap()));
+    executor.spawn(CoTask::new(console::handler_task(console_param).unwrap()));
     executor.spawn(CoTask::new(layer_task));
 
     executor.spawn(CoTask::new(async {
@@ -150,15 +148,15 @@ fn start_window() -> ! {
         }
     }));
 
-    task::spawn(Task::new(counter_window::handler_task(
-        "Hello Window".into(),
-        Point::new(300, 100),
-    )));
-    task::spawn(Task::new(text_window::handler_task()));
-    let task_b_id = task::spawn(Task::new(counter_window::handler_task(
-        "TaskB Window".into(),
-        Point::new(100, 100),
-    )));
+    task::spawn(Task::new(
+        counter_window::handler_task("Hello Window".into(), Point::new(300, 100)).unwrap(),
+    ));
+    task::spawn(Task::new(
+        text_window::handler_task("Text Box test".into(), Point::new(350, 200)).unwrap(),
+    ));
+    let task_b_id = task::spawn(Task::new(
+        counter_window::handler_task("TaskB Window".into(), Point::new(100, 100)).unwrap(),
+    ));
 
     let (tx, mut rx) = mpsc::channel(100);
     KEYBOARD_EVENT_TX.init_once(|| tx);

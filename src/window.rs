@@ -6,7 +6,6 @@ use crate::{
     sync::mpsc,
     triple_buffer::{self, Producer},
 };
-use futures_util::StreamExt;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Builder {

@@ -10,7 +10,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
-use futures_util::{task::AtomicWaker, Stream, StreamExt as _};
+use futures_util::{task::AtomicWaker, Stream};
 use mikanos_usb as usb;
 use x86_64::structures::{idt::InterruptStackFrame, paging::OffsetPageTable};
 
@@ -146,20 +146,13 @@ pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptSt
 }
 
 pub(crate) async fn handler_task() {
-    let res = async {
-        let mut interrupts = InterruptStream::new();
-        while let Some(()) = interrupts.next().await {
-            let mut xhc = XHC.get().lock();
-            while xhc.has_event() {
-                if let Err(err) = xhc.process_event().map_err(Error::from) {
-                    error!("error while process_event: {}", err);
-                }
+    let mut interrupts = InterruptStream::new();
+    while let Some(()) = interrupts.next().await {
+        let mut xhc = XHC.get().lock();
+        while xhc.has_event() {
+            if let Err(err) = xhc.process_event().map_err(Error::from) {
+                error!("error while process_event: {}", err);
             }
         }
-        Ok::<(), Error>(())
-    }
-    .await;
-    if let Err(err) = res {
-        panic!("error occurred during handling xhc interruption: {}", err);
     }
 }

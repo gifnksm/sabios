@@ -13,7 +13,7 @@ pub(crate) mod lapic {
         sync::atomic::{AtomicU64, Ordering},
         task::{Context, Poll},
     };
-    use futures_util::{select_biased, task::AtomicWaker, Future, FutureExt, Stream, StreamExt};
+    use futures_util::{select_biased, task::AtomicWaker, Future, Stream};
     use volatile::Volatile;
     use x86_64::structures::idt::InterruptStackFrame;
 

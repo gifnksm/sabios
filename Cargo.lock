@@ -883,6 +883,7 @@ dependencies = [
  "linked_list_allocator",
  "mikanos_usb",
  "num-traits",
+ "pin-project",
  "spin",
  "static_assertions",
  "uart_16550",

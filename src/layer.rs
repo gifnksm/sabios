@@ -15,7 +15,6 @@ use core::{
 };
 use custom_debug_derive::Debug as CustomDebug;
 use derivative::Derivative;
-use futures_util::StreamExt as _;
 
 pub(crate) const DESKTOP_HEIGHT: usize = 0;
 pub(crate) const CONSOLE_HEIGHT: usize = 1;
@@ -473,78 +472,70 @@ impl EventSender {
     }
 }
 
-pub(crate) fn handler_task() -> impl Future<Output = ()> {
+pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
     // Initialize LAYER_EVENT_TX before co-task starts
     let (tx, mut rx) = mpsc::channel(100);
     LAYER_EVENT_TX.init_once(|| tx);
 
     async move {
-        let res = async {
-            let mut lm = LayerManager::new()?;
-            let mut am = ActiveLayer::new();
+        let mut lm = LayerManager::new()?;
+        let mut am = ActiveLayer::new();
 
-            let mut drag_layer_id = None;
-            while let Some(event) = rx.next().await {
-                match event {
-                    LayerEvent::Register { layer } => lm.register(layer),
-                    LayerEvent::DrawLayer { layer_id, tx } => {
-                        lm.draw_layer(layer_id);
-                        tx.send(());
+        let mut drag_layer_id = None;
+        while let Some(event) = rx.next().await {
+            match event {
+                LayerEvent::Register { layer } => lm.register(layer),
+                LayerEvent::DrawLayer { layer_id, tx } => {
+                    lm.draw_layer(layer_id);
+                    tx.send(());
+                }
+                LayerEvent::MoveTo { layer_id, pos, tx } => {
+                    lm.move_to(layer_id, pos);
+                    tx.send(());
+                }
+                LayerEvent::SetHeight { layer_id, height } => lm.set_layer_height(layer_id, height),
+                // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
+                LayerEvent::MouseEvent {
+                    cursor_layer_id,
+                    event,
+                    tx,
+                } => {
+                    am.set_mouse_layer(&mut lm, Some(cursor_layer_id));
+                    let MouseEvent {
+                        down,
+                        up,
+                        pos,
+                        pos_diff,
+                    } = event;
+                    if up.contains(MouseButton::Left) {
+                        drag_layer_id = None;
                     }
-                    LayerEvent::MoveTo { layer_id, pos, tx } => {
-                        lm.move_to(layer_id, pos);
-                        tx.send(());
+                    if let Some(layer_id) = drag_layer_id {
+                        lm.move_relative(layer_id, pos_diff);
                     }
-                    LayerEvent::SetHeight { layer_id, height } => {
-                        lm.set_layer_height(layer_id, height)
+                    if down.contains(MouseButton::Left) {
+                        drag_layer_id = lm
+                            .layers_by_pos(pos)
+                            .find(|layer| layer.id != cursor_layer_id)
+                            .filter(|layer| layer.draggable)
+                            .map(|layer| layer.id());
+                        am.activate(&mut lm, drag_layer_id);
                     }
-                    // LayerEvent::Hide { layer_id } => lm.hide(layer_id),
-                    LayerEvent::MouseEvent {
-                        cursor_layer_id,
-                        event,
-                        tx,
-                    } => {
-                        am.set_mouse_layer(&mut lm, Some(cursor_layer_id));
-                        let MouseEvent {
-                            down,
-                            up,
-                            pos,
-                            pos_diff,
-                        } = event;
-                        if up.contains(MouseButton::Left) {
-                            drag_layer_id = None;
+                    tx.send(());
+                }
+                LayerEvent::KeyboardEvent { event, tx } => {
+                    if let Some(layer_id) = am.active_layer() {
+                        if let Err(err) = lm.notify_keyboard_event(layer_id, event) {
+                            warn!("failed to notify_keyboard_event: {}", err);
                         }
-                        if let Some(layer_id) = drag_layer_id {
-                            lm.move_relative(layer_id, pos_diff);
-                        }
-                        if down.contains(MouseButton::Left) {
-                            drag_layer_id = lm
-                                .layers_by_pos(pos)
-                                .find(|layer| layer.id != cursor_layer_id)
-                                .filter(|layer| layer.draggable)
-                                .map(|layer| layer.id());
-                            am.activate(&mut lm, drag_layer_id);
-                        }
-                        tx.send(());
+                    } else {
+                        crate::println!("key push not handled: {:?}", event);
                     }
-                    LayerEvent::KeyboardEvent { event, tx } => {
-                        if let Some(layer_id) = am.active_layer() {
-                            if let Err(err) = lm.notify_keyboard_event(layer_id, event) {
-                                warn!("failed to notify_keyboard_event: {}", err);
-                            }
-                        } else {
-                            crate::println!("key push not handled: {:?}", event);
-                        }
-                        tx.send(());
-                    }
+                    tx.send(());
                 }
             }
+        }
 
-            Ok::<(), Error>(())
-        }
-        .await;
-        if let Err(err) = res {
-            panic!("error occurred during handling layer event: {}", err);
-        }
+        Ok(())
     }
 }

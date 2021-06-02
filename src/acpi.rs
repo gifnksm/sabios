@@ -173,7 +173,7 @@ pub(crate) fn wait_milliseconds(msec: u32) {
 
     let mut port = PortReadOnly::<u32>::new(fadt.pm_tmr_blk as u16);
     let start = unsafe { port.read() };
-    let mut end = start + PM_TIMER_FREQ * msec;
+    let mut end = start + PM_TIMER_FREQ * msec / 1000;
     if !pm_timer_32 {
         end &= 0x00ffffff;
     }

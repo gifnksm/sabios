@@ -1,6 +1,7 @@
 use crate::{
+    font,
     framed_window::{FramedWindow, FramedWindowEvent},
-    graphics::{self, Color, Draw, Offset, Point, Rectangle, Size},
+    graphics::{self, Color, Draw, Point, Rectangle, Size},
     prelude::*,
     timer,
 };
@@ -21,9 +22,13 @@ pub(crate) struct Terminal {
 
 impl Terminal {
     pub(crate) fn new(title: String, pos: Point<i32>, text_size: Size<i32>) -> Result<Self> {
+        let font_size = font::FONT_PIXEL_SIZE;
         let window = FramedWindow::builder(title)
             .pos(pos)
-            .size(Size::new(text_size.x * 8, text_size.y * 16))
+            .size(Size::new(
+                text_size.x * font_size.x,
+                text_size.y * font_size.y,
+            ))
             .build()?;
         Ok(Self {
             text_size,
@@ -45,14 +50,19 @@ impl Terminal {
     }
 
     fn insert_pos(&self) -> Point<i32> {
-        Point::new(4 + 8 * self.cursor.x, 6 + 16 * self.cursor.y)
+        let font_size = font::FONT_PIXEL_SIZE;
+        Point::new(
+            4 + font_size.x * self.cursor.x,
+            6 + font_size.y * self.cursor.y,
+        )
     }
 
     fn draw_cursor(&mut self, visible: bool) {
+        let font_size = font::FONT_PIXEL_SIZE;
         let color = if visible { Color::WHITE } else { Color::BLACK };
-        let pos = self.insert_pos() - Offset::new(0, 1);
+        let pos = self.insert_pos();
         self.window
-            .fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
+            .fill_rect(Rectangle::new(pos, font_size - Size::new(1, 1)), color);
     }
 
     fn handle_event(&mut self, event: FramedWindowEvent) {

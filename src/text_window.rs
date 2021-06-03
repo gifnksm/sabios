@@ -1,7 +1,7 @@
 use crate::{
     font,
     framed_window::{FramedWindow, FramedWindowEvent},
-    graphics::{self, Color, Draw, Offset, Point, Rectangle, Size},
+    graphics::{self, Color, Draw, Point, Rectangle, Size},
     prelude::*,
     timer,
 };
@@ -22,7 +22,8 @@ pub(crate) struct TextWindow {
 
 impl TextWindow {
     pub(crate) fn new(title: String, pos: Point<i32>) -> Result<Self> {
-        let window_size = Size::new(160, 24);
+        let font_size = font::FONT_PIXEL_SIZE;
+        let window_size = Size::new(160, font_size.y + 8);
         let window = FramedWindow::builder(title)
             .size(window_size)
             .pos(pos)
@@ -30,13 +31,14 @@ impl TextWindow {
         Ok(Self {
             window,
             index: 0,
-            max_chars: (window_size.x - 8) / 8 - 1,
+            max_chars: (window_size.x - 8) / font_size.x - 1,
             cursor_visible: true,
         })
     }
 
     fn insert_pos(&self) -> Point<i32> {
-        Point::new(4 + 8 * self.index, 6)
+        let font_size = font::FONT_PIXEL_SIZE;
+        Point::new(4 + font_size.x * self.index, 6)
     }
 
     fn draw_text_box(&mut self) {
@@ -51,10 +53,11 @@ impl TextWindow {
     }
 
     fn draw_cursor(&mut self, visible: bool) {
+        let font_size = font::FONT_PIXEL_SIZE;
         let color = if visible { Color::BLACK } else { Color::WHITE };
-        let pos = self.insert_pos() - Offset::new(0, 1);
+        let pos = self.insert_pos();
         self.window
-            .fill_rect(Rectangle::new(pos, Size::new(7, 15)), color);
+            .fill_rect(Rectangle::new(pos, font_size - Size::new(1, 1)), color);
     }
 
     fn handle_event(&mut self, event: FramedWindowEvent) {

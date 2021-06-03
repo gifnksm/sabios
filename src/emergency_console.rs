@@ -1,14 +1,12 @@
 use crate::{
-    font,
-    framebuffer::{self, Drawer, ScreenInfo},
-    graphics::{Color, Draw, Point, Rectangle},
+    graphics::{font, frame_buffer, Color, Draw, FrameBufferDrawer, Point, Rectangle, ScreenInfo},
     serial_print,
 };
 use core::fmt;
 
 pub(crate) fn with_console(f: impl FnOnce(&mut EmergencyConsole<'_>)) -> ! {
-    let screen_info = *framebuffer::info();
-    let mut drawer = unsafe { framebuffer::emergency_lock_drawer() };
+    let screen_info = ScreenInfo::get();
+    let mut drawer = unsafe { frame_buffer::emergency_lock_drawer() };
     let mut console = EmergencyConsole {
         screen_info,
         pos: Point::new(0, 0),
@@ -23,7 +21,7 @@ pub(crate) fn with_console(f: impl FnOnce(&mut EmergencyConsole<'_>)) -> ! {
 pub(crate) struct EmergencyConsole<'a> {
     screen_info: ScreenInfo,
     pos: Point<i32>,
-    drawer: &'a mut Drawer,
+    drawer: &'a mut FrameBufferDrawer,
 }
 
 impl fmt::Write for EmergencyConsole<'_> {
@@ -36,7 +34,7 @@ impl fmt::Write for EmergencyConsole<'_> {
                     Rectangle::new(self.pos, font::FONT_PIXEL_SIZE),
                     Color::WHITE,
                 );
-                font::draw_char(self.drawer, self.pos, ch, Color::RED);
+                self.drawer.draw_char(self.pos, ch, Color::RED);
                 self.pos.x += font::FONT_PIXEL_SIZE.x;
             }
 

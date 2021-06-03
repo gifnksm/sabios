@@ -1,9 +1,8 @@
 use crate::{
-    font,
     graphics::{Color, Draw, Point, Rectangle, Size},
     keyboard::KeyboardEvent,
-    layer::WindowEvent,
     prelude::*,
+    window::WindowEvent,
     window::{self, Window},
 };
 use alloc::string::String;
@@ -210,12 +209,8 @@ impl FramedWindow {
             Rectangle::new(Point::new(3, 3), Size::new(wx - 6, 18)),
             background,
         );
-        font::draw_str(
-            &mut self.window,
-            Point::new(24, 4),
-            &self.title,
-            Color::WHITE,
-        );
+        self.window
+            .draw_str(Point::new(24, 4), &self.title, Color::WHITE);
 
         for (y, row) in (0..).zip(CLOSE_BUTTON) {
             for (x, ch) in (0..).zip(row) {

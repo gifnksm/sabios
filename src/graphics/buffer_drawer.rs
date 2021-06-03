@@ -1,6 +1,5 @@
 use crate::{
-    framebuffer::ScreenInfo,
-    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
+    graphics::{Color, Draw, Offset, Point, Rectangle, ScreenInfo, Size},
     prelude::*,
 };
 use alloc::{vec, vec::Vec};
@@ -71,7 +70,7 @@ impl<B> BufferDrawer<B> {
 }
 
 impl FrameBufferDrawer {
-    pub(crate) fn new_framebuffer(buffer: FrameBuffer) -> Result<Self> {
+    pub(crate) fn new_frame_buffer(buffer: FrameBuffer) -> Result<Self> {
         let info = buffer.info();
         let size = Size::new(
             i32::try_from(info.horizontal_resolution)?,

@@ -1,7 +1,6 @@
 use crate::{
-    font,
     framed_window::{FramedWindow, FramedWindowEvent},
-    graphics::{self, Color, Draw, Point, Rectangle, Size},
+    graphics::{font, Color, Draw, Point, Rectangle, Size},
     prelude::*,
     timer,
 };
@@ -40,13 +39,8 @@ impl Terminal {
 
     fn draw_terminal(&mut self) {
         let area = self.window.area();
-        graphics::draw_box(
-            &mut self.window,
-            area,
-            BACKGROUND,
-            BORDER_DARK,
-            BORDER_LIGHT,
-        )
+        self.window
+            .draw_box(area, BACKGROUND, BORDER_DARK, BORDER_LIGHT)
     }
 
     fn insert_pos(&self) -> Point<i32> {

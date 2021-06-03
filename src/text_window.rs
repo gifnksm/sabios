@@ -1,7 +1,6 @@
 use crate::{
-    font,
     framed_window::{FramedWindow, FramedWindowEvent},
-    graphics::{self, Color, Draw, Point, Rectangle, Size},
+    graphics::{font, Color, Draw, Point, Rectangle, Size},
     prelude::*,
     timer,
 };
@@ -43,13 +42,8 @@ impl TextWindow {
 
     fn draw_text_box(&mut self) {
         let area = self.window.area();
-        graphics::draw_box(
-            &mut self.window,
-            area,
-            BACKGROUND,
-            BORDER_DARK,
-            BORDER_LIGHT,
-        );
+        self.window
+            .draw_box(area, BACKGROUND, BORDER_DARK, BORDER_LIGHT);
     }
 
     fn draw_cursor(&mut self, visible: bool) {
@@ -78,7 +72,7 @@ impl TextWindow {
                 } else if event.ascii >= ' ' && self.index < self.max_chars {
                     self.draw_cursor(false);
                     let pos = self.insert_pos();
-                    font::draw_char(&mut self.window, pos, event.ascii, Color::BLACK);
+                    self.window.draw_char(pos, event.ascii, Color::BLACK);
                     self.index += 1;
                     self.draw_cursor(self.cursor_visible);
                 }

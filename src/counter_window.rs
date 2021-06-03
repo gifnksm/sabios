@@ -1,5 +1,5 @@
 use crate::{
-    co_task, font,
+    co_task,
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{Color, Draw, Point, Rectangle, Size},
     prelude::*,
@@ -34,7 +34,7 @@ impl CounterWindow {
             Color::from_code(0xc6c6c6),
         );
         let s = format!("{:010}", self.count);
-        font::draw_str(&mut self.window, Point::new(20, 4), &s, Color::BLACK);
+        self.window.draw_str(Point::new(20, 4), &s, Color::BLACK);
         self.count += 1;
     }
 

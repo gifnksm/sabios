@@ -34,7 +34,6 @@ use x86_64::VirtAddr;
 
 mod acpi;
 mod allocator;
-mod buffer_drawer;
 mod co_task;
 mod console;
 mod counter_window;
@@ -42,8 +41,6 @@ mod cxx_support;
 mod desktop;
 mod emergency_console;
 mod error;
-mod font;
-mod framebuffer;
 mod framed_window;
 mod gdt;
 mod graphics;
@@ -81,10 +78,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 }
 
 fn init(boot_info: &'static mut BootInfo) -> Result<()> {
-    let (framebuffer, physical_memory_offset, rsdp) = extract_boot_info(boot_info)?;
+    let (frame_buffer, physical_memory_offset, rsdp) = extract_boot_info(boot_info)?;
 
-    // Initialize framebuffer for boot log
-    framebuffer::init(framebuffer)?;
+    // Initialize graphics for boot log
+    graphics::init(frame_buffer)?;
 
     // Initialize memory mapping / frame allocator / heap
     let mut mapper = unsafe { paging::init(physical_memory_offset) };
@@ -213,7 +210,7 @@ fn start_window() -> ! {
 }
 
 fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr, VirtAddr)> {
-    let framebuffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
+    let frame_buffer = mem::replace(&mut boot_info.framebuffer, Optional::None)
         .into_option()
         .ok_or(ErrorKind::FrameBufferNotSupported)?;
 
@@ -231,7 +228,7 @@ fn extract_boot_info(boot_info: &mut BootInfo) -> Result<(FrameBuffer, VirtAddr,
         .ok_or(ErrorKind::RsdpNotMapped)?;
     let rsdp = VirtAddr::new(rsdp);
 
-    Ok((framebuffer, physical_memory_offset, rsdp))
+    Ok((frame_buffer, physical_memory_offset, rsdp))
 }
 
 fn hlt_loop() -> ! {

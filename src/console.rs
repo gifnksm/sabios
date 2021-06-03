@@ -1,6 +1,6 @@
 use crate::{
-    desktop, font, framebuffer,
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    desktop,
+    graphics::{font, frame_buffer, Color, Draw, FrameBufferDrawer, Point, Rectangle, Size},
     layer,
     prelude::*,
     sync::{mpsc, Mutex, MutexGuard},
@@ -158,7 +158,7 @@ impl Console {
             f(writer);
             tx.send(())?;
         } else {
-            let drawer = Drawer::FrameBuffer(framebuffer::lock_drawer());
+            let drawer = Drawer::FrameBuffer(frame_buffer::lock_drawer());
             let writer = ConsoleWriter {
                 drawer,
                 console: self,
@@ -170,7 +170,7 @@ impl Console {
 }
 
 enum Drawer<'a> {
-    FrameBuffer(MutexGuard<'static, framebuffer::Drawer>),
+    FrameBuffer(MutexGuard<'static, FrameBufferDrawer>),
     Window(MutexGuard<'a, Window>),
 }
 
@@ -253,7 +253,8 @@ impl<'d, 'c> ConsoleWriter<'d, 'c> {
 
                 let bytes = &self.console.buffer[console_y][x_range];
                 let draw_p = self.to_draw_point(console_p);
-                font::draw_byte_str(&mut self.drawer, draw_p, bytes, self.console.fg_color);
+                self.drawer
+                    .draw_byte_str(draw_p, bytes, self.console.fg_color);
             }
         }
     }

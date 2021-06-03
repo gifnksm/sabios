@@ -1,6 +1,5 @@
 use crate::{
-    framebuffer,
-    graphics::{Color, Draw, Offset, Point},
+    graphics::{Color, Draw, Offset, Point, ScreenInfo},
     layer,
     prelude::*,
     sync::{mpsc, OnceCell},
@@ -102,13 +101,13 @@ pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
 
     async move {
         let mut cursor_pos = Point::new(300, 200);
-        let screen_info = *framebuffer::info();
+        let screen_info = ScreenInfo::get();
 
         let mut window = Window::builder()
             .pos(cursor_pos)
             .size(MOUSE_CURSOR_SIZE)
             .transparent_color(Some(TRANSPARENT_COLOR))
-            .height(layer::MOUSE_CURSOR_HEIGHT)
+            .height(usize::MAX)
             .build()?;
 
         let cursor_layer_id = window.layer_id();

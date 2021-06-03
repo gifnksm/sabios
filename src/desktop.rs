@@ -1,6 +1,5 @@
 use crate::{
-    framebuffer,
-    graphics::{Color, Draw, Point, Rectangle, Size},
+    graphics::{Color, Draw, Point, Rectangle, ScreenInfo, Size},
     layer,
     prelude::*,
     window::Window,
@@ -29,7 +28,7 @@ fn draw(drawer: &mut dyn Draw, size: Size<i32>) {
 }
 
 pub(crate) async fn handler_task() -> Result<()> {
-    let screen_info = *framebuffer::info();
+    let screen_info = ScreenInfo::get();
     let mut window = Window::builder()
         .size(screen_info.size)
         .height(layer::DESKTOP_HEIGHT)

@@ -1,11 +1,18 @@
 use crate::{
-    framebuffer,
-    graphics::{Color, Draw, Point, Rectangle, Size},
-    layer::{self, EventSender, Layer, LayerBuffer, LayerId, WindowEvent},
+    graphics::{Color, Draw, Point, Rectangle, ScreenInfo, Size},
+    keyboard::KeyboardEvent,
+    layer::{self, EventSender, Layer, LayerBuffer, LayerId},
     prelude::*,
     sync::mpsc,
     triple_buffer::{self, Producer},
 };
+
+#[derive(Debug)]
+pub(crate) enum WindowEvent {
+    Activated,
+    Deactivated,
+    Keyboard(KeyboardEvent),
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct Builder {
@@ -53,7 +60,7 @@ impl Builder {
     }
 
     pub(crate) fn build(&mut self) -> Result<Window> {
-        let screen_info = *framebuffer::info();
+        let screen_info = ScreenInfo::get();
         let mut buffer = LayerBuffer::new(self.size, screen_info)?;
         buffer.set_transparent_color(self.transparent_color);
 

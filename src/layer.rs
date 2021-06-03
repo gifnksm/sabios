@@ -1,12 +1,14 @@
 use crate::{
-    buffer_drawer::{Buffer, BufferDrawer, ShadowBuffer},
-    framebuffer::{self, ScreenInfo},
-    graphics::{Color, Draw, Offset, Point, Rectangle, Size},
+    graphics::{
+        frame_buffer, Buffer, BufferDrawer, Color, Draw, FrameBufferDrawer, Offset, Point,
+        Rectangle, ScreenInfo, ShadowBuffer, Size,
+    },
     keyboard::KeyboardEvent,
     mouse::{MouseButton, MouseEvent},
     prelude::*,
     sync::{mpsc, oneshot, MutexGuard, OnceCell},
     triple_buffer::Consumer,
+    window::WindowEvent,
 };
 use alloc::{collections::BTreeMap, vec, vec::Vec};
 use core::{
@@ -18,7 +20,6 @@ use derivative::Derivative;
 
 pub(crate) const DESKTOP_HEIGHT: usize = 0;
 pub(crate) const CONSOLE_HEIGHT: usize = 1;
-pub(crate) const MOUSE_CURSOR_HEIGHT: usize = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LayerId(u32);
@@ -148,21 +149,21 @@ impl Layer {
     }
 }
 
-pub(crate) struct LayerManager {
+struct LayerManager {
     layers: BTreeMap<LayerId, Layer>,
     layer_stack: Vec<LayerId>,
-    framebuffer: MutexGuard<'static, framebuffer::Drawer>,
+    frame_buffer: MutexGuard<'static, FrameBufferDrawer>,
     back_buffer: ShadowBuffer,
 }
 
 impl LayerManager {
     fn new() -> Result<Self> {
-        let framebuffer = framebuffer::lock_drawer();
-        let back_buffer = ShadowBuffer::new_shadow(framebuffer.size(), framebuffer.info())?;
+        let frame_buffer = frame_buffer::lock_drawer();
+        let back_buffer = ShadowBuffer::new_shadow(frame_buffer.size(), frame_buffer.info())?;
         Ok(Self {
             layers: BTreeMap::new(),
             layer_stack: vec![],
-            framebuffer,
+            frame_buffer,
             back_buffer,
         })
     }
@@ -219,7 +220,7 @@ impl LayerManager {
     }
 
     fn finish_draw(&mut self, area: Rectangle<i32>) {
-        self.framebuffer
+        self.frame_buffer
             .copy(Offset::new(0, 0), &self.back_buffer, area);
     }
 
@@ -395,13 +396,6 @@ enum LayerEvent {
         event: KeyboardEvent,
         tx: oneshot::Sender<()>,
     },
-}
-
-#[derive(Debug)]
-pub(crate) enum WindowEvent {
-    Activated,
-    Deactivated,
-    Keyboard(KeyboardEvent),
 }
 
 static LAYER_EVENT_TX: OnceCell<mpsc::Sender<LayerEvent>> = OnceCell::uninit();

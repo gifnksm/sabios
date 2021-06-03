@@ -1,6 +1,6 @@
 use core::{
     fmt, iter,
-    ops::{Add, AddAssign, BitAnd, Neg, Range, Sub, SubAssign},
+    ops::{Add, AddAssign, BitAnd, BitOr, Neg, Range, Sub, SubAssign},
 };
 use num_traits::One;
 
@@ -175,6 +175,20 @@ where
         let start = Point::<T>::elem_max(self.pos, rhs.pos);
         let end = Point::<T>::elem_min(self.end_pos(), rhs.end_pos());
         Rectangle::from_points(start, end)
+    }
+}
+
+impl<T> BitOr<Rectangle<T>> for Rectangle<T>
+where
+    T: Copy + Ord + Add<Output = T> + Sub<Output = T>,
+{
+    type Output = Self;
+
+    fn bitor(self, rhs: Rectangle<T>) -> Self::Output {
+        let start = Point::<T>::elem_min(self.pos, rhs.pos);
+        let end = Point::<T>::elem_max(self.end_pos(), rhs.end_pos());
+        #[allow(clippy::unwrap_used)]
+        Rectangle::from_points(start, end).unwrap()
     }
 }
 

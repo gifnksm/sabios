@@ -12,7 +12,12 @@ fn get_ascii_font(ch: u8) -> &'static Font {
     &ASCII_FONT[usize::from(ch)]
 }
 
-pub(super) fn draw_byte_char<D>(drawer: &mut D, pos: Point<i32>, byte: u8, color: Color)
+pub(super) fn draw_byte_char<D>(
+    drawer: &mut D,
+    pos: Point<i32>,
+    byte: u8,
+    color: Color,
+) -> Rectangle<i32>
 where
     D: Draw,
 {
@@ -29,17 +34,29 @@ where
             }
         }
     }
+
+    draw_rect
 }
 
-pub(super) fn draw_byte_str<D>(drawer: &mut D, pos: Point<i32>, bytes: &[u8], color: Color)
+pub(super) fn draw_byte_str<D>(
+    drawer: &mut D,
+    pos: Point<i32>,
+    bytes: &[u8],
+    color: Color,
+) -> Rectangle<i32>
 where
     D: Draw,
 {
-    let mut pos = pos;
+    let start_pos = pos;
+    let mut end_pos = start_pos;
+    let mut pos = start_pos;
     for byte in bytes {
-        draw_byte_char(drawer, pos, *byte, color);
-        pos.x += FONT_PIXEL_SIZE.x;
+        let rect = draw_byte_char(drawer, pos, *byte, color);
+        pos.x = rect.x_end();
+        end_pos = Point::elem_max(end_pos, rect.end_pos());
     }
+    let size = end_pos - start_pos;
+    Rectangle::new(start_pos, size)
 }
 
 pub(crate) fn char_to_byte(ch: char) -> u8 {
@@ -47,7 +64,12 @@ pub(crate) fn char_to_byte(ch: char) -> u8 {
     u8::try_from(codepoint).unwrap_or(b'?')
 }
 
-pub(super) fn draw_char<D>(drawer: &mut D, pos: Point<i32>, ch: char, color: Color)
+pub(super) fn draw_char<D>(
+    drawer: &mut D,
+    pos: Point<i32>,
+    ch: char,
+    color: Color,
+) -> Rectangle<i32>
 where
     D: Draw,
 {
@@ -55,13 +77,18 @@ where
     draw_byte_char(drawer, pos, byte, color)
 }
 
-pub(super) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color)
+pub(super) fn draw_str<D>(drawer: &mut D, pos: Point<i32>, s: &str, color: Color) -> Rectangle<i32>
 where
     D: Draw,
 {
-    let mut pos = pos;
+    let start_pos = pos;
+    let mut end_pos = start_pos;
+    let mut pos = start_pos;
     for ch in s.chars() {
-        draw_char(drawer, pos, ch, color);
-        pos.x += FONT_PIXEL_SIZE.x;
+        let rect = draw_char(drawer, pos, ch, color);
+        pos.x = rect.x_end();
+        end_pos = Point::elem_max(end_pos, rect.end_pos());
     }
+    let size = end_pos - start_pos;
+    Rectangle::new(start_pos, size)
 }

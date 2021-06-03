@@ -1,4 +1,4 @@
-use super::{Color, Offset, Point, Rectangle, Size, font};
+use super::{font, Color, Offset, Point, Rectangle, Size};
 
 pub(crate) trait Draw {
     fn size(&self) -> Size<i32>;
@@ -30,28 +30,28 @@ pub(crate) trait Draw {
         }
     }
 
-    fn draw_byte_char(&mut self, pos: Point<i32>, byte: u8, color: Color)
+    fn draw_byte_char(&mut self, pos: Point<i32>, byte: u8, color: Color) -> Rectangle<i32>
     where
         Self: Sized,
     {
         font::draw_byte_char(self, pos, byte, color)
     }
 
-    fn draw_byte_str(&mut self, pos: Point<i32>, bytes: &[u8], color: Color)
+    fn draw_byte_str(&mut self, pos: Point<i32>, bytes: &[u8], color: Color) -> Rectangle<i32>
     where
         Self: Sized,
     {
         font::draw_byte_str(self, pos, bytes, color)
     }
 
-    fn draw_char(&mut self, pos: Point<i32>, ch: char, color: Color)
+    fn draw_char(&mut self, pos: Point<i32>, ch: char, color: Color) -> Rectangle<i32>
     where
         Self: Sized,
     {
         font::draw_char(self, pos, ch, color)
     }
 
-    fn draw_str(&mut self, pos: Point<i32>, s: &str, color: Color)
+    fn draw_str(&mut self, pos: Point<i32>, s: &str, color: Color) -> Rectangle<i32>
     where
         Self: Sized,
     {

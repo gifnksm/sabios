@@ -126,10 +126,10 @@ impl Layer {
         self.consumer.load();
     }
 
-    fn area(&self) -> Option<Rectangle<i32>> {
+    fn area(&self) -> Rectangle<i32> {
         let pos = self.pos;
         let size = self.consumer.buffer().size();
-        Some(Rectangle { pos, size })
+        Rectangle { pos, size }
     }
 
     fn draw_to<B>(&self, drawer: &mut BufferDrawer<B>, dst_area: Rectangle<i32>)
@@ -174,28 +174,7 @@ impl LayerManager {
     }
 
     fn draw_area(&mut self, dst_area: Rectangle<i32>) {
-        // destructure `self` to avoid borrow checker errors
-        let Self {
-            layers,
-            layer_stack,
-            back_buffer,
-            ..
-        } = self;
-
-        let layers = layer_stack.iter().filter_map(|id| layers.get(id));
-        for layer in layers {
-            layer.draw_to(back_buffer, dst_area);
-        }
-
-        self.finish_draw(dst_area);
-    }
-
-    fn draw_layer(&mut self, layer_id: LayerId) {
-        if let Some(layer) = self.layers.get_mut(&layer_id) {
-            layer.load();
-        }
-
-        (|| {
+        if let Some(dst_area) = dst_area & self.frame_buffer.area() {
             // destructure `self` to avoid borrow checker errors
             let Self {
                 layers,
@@ -204,7 +183,34 @@ impl LayerManager {
                 ..
             } = self;
 
-            let dst_area = layers.get(&layer_id).and_then(Layer::area)?;
+            let layers = layer_stack.iter().filter_map(|id| layers.get(id));
+            for layer in layers {
+                layer.draw_to(back_buffer, dst_area);
+            }
+        }
+
+        self.finish_draw(dst_area);
+    }
+
+    fn draw_layer(&mut self, layer_id: LayerId, layer_area: Option<Rectangle<i32>>) {
+        (|| {
+            let target_layer = self.layers.get_mut(&layer_id)?;
+            target_layer.load();
+
+            let dst_area = match layer_area {
+                Some(layer_area) => (target_layer.area() & (layer_area + target_layer.pos))?,
+                None => target_layer.area(),
+            };
+            let dst_area = (dst_area & self.frame_buffer.area())?;
+
+            // destructure `self` to avoid borrow checker errors
+            let Self {
+                layers,
+                layer_stack,
+                back_buffer,
+                ..
+            } = self;
+
             let layers = layer_stack
                 .iter()
                 .skip_while(|id| **id != layer_id)
@@ -229,10 +235,8 @@ impl LayerManager {
             let layer_id = layer.id();
             let old_area = layer.area();
             layer.move_to(pos);
-            if let Some(old_area) = old_area {
-                self.draw_area(old_area);
-            }
-            self.draw_layer(layer_id);
+            self.draw_area(old_area);
+            self.draw_layer(layer_id, None);
         }
     }
 
@@ -241,10 +245,8 @@ impl LayerManager {
             let layer_id = layer.id();
             let old_area = layer.area();
             layer.move_to(layer.pos + offset);
-            if let Some(old_area) = old_area {
-                self.draw_area(old_area);
-            }
-            self.draw_layer(layer_id)
+            self.draw_area(old_area);
+            self.draw_layer(layer_id, None)
         }
     }
 
@@ -275,12 +277,9 @@ impl LayerManager {
             .rev()
             .copied()
             .filter_map(move |layer_id| {
-                self.layers.get(&layer_id).filter(|layer| {
-                    layer
-                        .area()
-                        .map(|area| area.contains(&pos))
-                        .unwrap_or(false)
-                })
+                self.layers
+                    .get(&layer_id)
+                    .filter(|layer| layer.area().contains(&pos))
             })
     }
 
@@ -330,7 +329,7 @@ impl ActiveLayer {
         if let Some(layer_id) = self.active_layer {
             let height = self.active_height(layer_manager);
             layer_manager.set_layer_height(layer_id, height);
-            layer_manager.draw_layer(layer_id);
+            layer_manager.draw_layer(layer_id, None);
         }
     }
 
@@ -343,7 +342,7 @@ impl ActiveLayer {
             if let Err(err) = layer_manager.notify_deactivated(layer_id) {
                 warn!("failed to notify_deactivated: {}", err);
             }
-            layer_manager.draw_layer(layer_id);
+            layer_manager.draw_layer(layer_id, None);
         }
 
         self.active_layer = layer_id;
@@ -354,7 +353,7 @@ impl ActiveLayer {
             if let Err(err) = layer_manager.notify_activated(layer_id) {
                 warn!("failed to notify_activated: {}", err);
             }
-            layer_manager.draw_layer(layer_id);
+            layer_manager.draw_layer(layer_id, None);
         }
     }
 
@@ -373,6 +372,7 @@ enum LayerEvent {
     },
     DrawLayer {
         layer_id: LayerId,
+        layer_area: Rectangle<i32>,
         tx: oneshot::Sender<()>,
     },
     MoveTo {
@@ -421,9 +421,17 @@ impl EventSender {
         self.send(LayerEvent::Register { layer })
     }
 
-    pub(crate) async fn draw_layer(&self, layer_id: LayerId) -> Result<()> {
+    pub(crate) async fn draw_layer(
+        &self,
+        layer_id: LayerId,
+        layer_area: Rectangle<i32>,
+    ) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.send(LayerEvent::DrawLayer { layer_id, tx })?;
+        self.send(LayerEvent::DrawLayer {
+            layer_id,
+            layer_area,
+            tx,
+        })?;
         rx.await;
         Ok(())
     }
@@ -479,8 +487,12 @@ pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
         while let Some(event) = rx.next().await {
             match event {
                 LayerEvent::Register { layer } => lm.register(layer),
-                LayerEvent::DrawLayer { layer_id, tx } => {
-                    lm.draw_layer(layer_id);
+                LayerEvent::DrawLayer {
+                    layer_id,
+                    layer_area,
+                    tx,
+                } => {
+                    lm.draw_layer(layer_id, Some(layer_area));
                     tx.send(());
                 }
                 LayerEvent::MoveTo { layer_id, pos, tx } => {

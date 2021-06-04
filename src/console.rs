@@ -3,7 +3,7 @@ use crate::{
     graphics::{font, frame_buffer, Color, Draw, FrameBufferDrawer, Point, Rectangle, Size},
     layer,
     prelude::*,
-    sync::{mpsc, Mutex, MutexGuard},
+    sync::{mpsc, SpinMutex, SpinMutexGuard},
     window::Window,
 };
 use alloc::sync::Arc;
@@ -38,7 +38,7 @@ pub fn _print(args: fmt::Arguments) {
 const ROWS: usize = 25;
 const COLUMNS: usize = 80;
 
-static CONSOLE: Mutex<Console> = Mutex::new(Console {
+static CONSOLE: SpinMutex<Console> = SpinMutex::new(Console {
     buffer: [[0; COLUMNS]; ROWS],
     fg_color: desktop::FG_COLOR,
     bg_color: desktop::BG_COLOR,
@@ -51,7 +51,7 @@ pub(crate) struct Console {
     fg_color: Color,
     bg_color: Color,
     cursor: Point<usize>,
-    window: Option<(Arc<Mutex<Window>>, mpsc::Sender<()>)>,
+    window: Option<(Arc<SpinMutex<Window>>, mpsc::Sender<()>)>,
 }
 
 #[derive(Debug)]
@@ -134,7 +134,10 @@ impl Console {
         redraw.scroll();
     }
 
-    fn set_window(&mut self, window: Option<(Arc<Mutex<Window>>, mpsc::Sender<()>)>) -> Result<()> {
+    fn set_window(
+        &mut self,
+        window: Option<(Arc<SpinMutex<Window>>, mpsc::Sender<()>)>,
+    ) -> Result<()> {
         self.window = window;
         self.refresh()?;
         Ok(())
@@ -170,8 +173,8 @@ impl Console {
 }
 
 enum Drawer<'a> {
-    FrameBuffer(MutexGuard<'static, FrameBufferDrawer>),
-    Window(MutexGuard<'a, Window>),
+    FrameBuffer(SpinMutexGuard<'static, FrameBufferDrawer>),
+    Window(SpinMutexGuard<'a, Window>),
 }
 
 impl<'a> Drawer<'a> {
@@ -269,7 +272,7 @@ impl<'d, 'c> fmt::Write for ConsoleWriter<'d, 'c> {
 }
 
 pub(crate) struct ConsoleInitParam {
-    window: Arc<Mutex<Window>>,
+    window: Arc<SpinMutex<Window>>,
     rx: mpsc::Receiver<()>,
 }
 
@@ -280,7 +283,7 @@ pub(crate) fn start_window_mode() -> Result<ConsoleInitParam> {
         .size(window_size)
         .height(layer::CONSOLE_HEIGHT)
         .build()?;
-    let window = Arc::new(Mutex::new(window));
+    let window = Arc::new(SpinMutex::new(window));
     let (tx, rx) = mpsc::channel(100);
     {
         interrupts::without_interrupts(|| {

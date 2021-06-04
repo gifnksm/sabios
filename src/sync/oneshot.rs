@@ -1,4 +1,4 @@
-use super::Mutex;
+use super::SpinMutex;
 
 use alloc::sync::Arc;
 use core::{
@@ -55,14 +55,14 @@ impl<T> Future for Receiver<T> {
 
 #[derive(Debug)]
 struct Inner<T> {
-    value: Mutex<Option<T>>,
+    value: SpinMutex<Option<T>>,
     waker: AtomicWaker,
 }
 
 impl<T> Inner<T> {
     fn new() -> Self {
         Self {
-            value: Mutex::new(None),
+            value: SpinMutex::new(None),
             waker: AtomicWaker::new(),
         }
     }

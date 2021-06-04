@@ -1,4 +1,4 @@
-use crate::sync::{Mutex, MutexGuard};
+use crate::sync::{SpinMutex, SpinMutexGuard};
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -44,7 +44,7 @@ impl<T> Producer<T> {
     }
 
     #[cfg(test)]
-    pub(crate) fn buffer(&self) -> MutexGuard<T> {
+    pub(crate) fn buffer(&self) -> SpinMutexGuard<T> {
         self.inner.buffers[self.in_progress].buffer()
     }
 
@@ -88,7 +88,7 @@ impl<T> Consumer<T> {
             .load(Ordering::Relaxed)
     }
 
-    pub(crate) fn buffer(&self) -> MutexGuard<T> {
+    pub(crate) fn buffer(&self) -> SpinMutexGuard<T> {
         self.inner.buffers[self.present].buffer()
     }
 
@@ -136,18 +136,18 @@ struct Inner<T> {
 #[derive(Debug)]
 struct Buffer<T> {
     epoch: AtomicU64,
-    value: Mutex<T>,
+    value: SpinMutex<T>,
 }
 
 impl<T> Buffer<T> {
     fn new(epoch: u64, value: T) -> Self {
         Self {
             epoch: AtomicU64::new(epoch),
-            value: Mutex::new(value),
+            value: SpinMutex::new(value),
         }
     }
 
-    fn buffer(&self) -> MutexGuard<T> {
+    fn buffer(&self) -> SpinMutexGuard<T> {
         self.value.lock()
     }
 

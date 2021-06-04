@@ -6,7 +6,7 @@ use crate::{
     keyboard::KeyboardEvent,
     mouse::{MouseButton, MouseEvent},
     prelude::*,
-    sync::{mpsc, oneshot, MutexGuard, OnceCell},
+    sync::{mpsc, oneshot, OnceCell, SpinMutexGuard},
     triple_buffer::Consumer,
     window::WindowEvent,
 };
@@ -152,7 +152,7 @@ impl Layer {
 struct LayerManager {
     layers: BTreeMap<LayerId, Layer>,
     layer_stack: Vec<LayerId>,
-    frame_buffer: MutexGuard<'static, FrameBufferDrawer>,
+    frame_buffer: SpinMutexGuard<'static, FrameBufferDrawer>,
     back_buffer: ShadowBuffer,
 }
 

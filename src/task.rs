@@ -2,7 +2,7 @@ use crate::{
     co_task::{CoTask, Executor},
     gdt,
     prelude::*,
-    sync::{Mutex, OnceCell},
+    sync::{OnceCell, SpinMutex},
 };
 use alloc::{
     boxed::Box,
@@ -19,12 +19,12 @@ use core::{
 use custom_debug_derive::Debug as CustomDebug;
 use x86_64::{instructions::interrupts, registers::control::Cr3};
 
-static TASK_MANAGER: OnceCell<Mutex<TaskManager>> = OnceCell::uninit();
+static TASK_MANAGER: OnceCell<SpinMutex<TaskManager>> = OnceCell::uninit();
 
 pub(crate) fn init() {
     let main_task = Task::new_main();
     main_task.set_level(MAX_LEVEL);
-    TASK_MANAGER.init_once(|| Mutex::new(TaskManager::new(main_task)));
+    TASK_MANAGER.init_once(|| SpinMutex::new(TaskManager::new(main_task)));
 
     let idle_task = Task::new(async { crate::hlt_loop() });
     idle_task.set_level(MIN_LEVEL);

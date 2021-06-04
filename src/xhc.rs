@@ -3,7 +3,7 @@ use crate::{
     keyboard, memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
-    sync::{Mutex, OnceCell},
+    sync::{OnceCell, SpinMutex},
 };
 use core::{
     pin::Pin,
@@ -14,7 +14,7 @@ use futures_util::{task::AtomicWaker, Stream};
 use mikanos_usb as usb;
 use x86_64::structures::{idt::InterruptStackFrame, paging::OffsetPageTable};
 
-static XHC: OnceCell<Mutex<&'static mut usb::xhci::Controller>> = OnceCell::uninit();
+static XHC: OnceCell<SpinMutex<&'static mut usb::xhci::Controller>> = OnceCell::uninit();
 
 pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<()> {
     let mut xhc_dev = None;
@@ -66,7 +66,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
 
     xhc.configure_connected_ports();
 
-    XHC.init_once(move || Mutex::new(xhc));
+    XHC.init_once(move || SpinMutex::new(xhc));
 
     Ok(())
 }

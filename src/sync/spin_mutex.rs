@@ -2,32 +2,32 @@ use crate::prelude::*;
 
 /// A wrapper around `spin::Mutex` which panics immediately when deadlock detected.
 #[derive(Debug, Default)]
-pub(crate) struct Mutex<T: ?Sized>(spin::Mutex<T>);
+pub(crate) struct SpinMutex<T: ?Sized>(spin::Mutex<T>);
 
-pub(crate) type MutexGuard<'a, T> = spin::MutexGuard<'a, T>;
+pub(crate) type SpinMutexGuard<'a, T> = spin::MutexGuard<'a, T>;
 
-impl<T> Mutex<T> {
+impl<T> SpinMutex<T> {
     pub(crate) const fn new(value: T) -> Self {
         Self(spin::Mutex::new(value))
     }
 }
 
-impl<T> Mutex<T>
+impl<T> SpinMutex<T>
 where
     T: ?Sized,
 {
     #[track_caller]
-    pub(crate) fn lock(&self) -> MutexGuard<'_, T> {
+    pub(crate) fn lock(&self) -> SpinMutexGuard<'_, T> {
         #[allow(clippy::unwrap_used)]
         self.try_lock().unwrap()
     }
 
-    pub(crate) fn spin_lock(&self) -> MutexGuard<'_, T> {
+    pub(crate) fn spin_lock(&self) -> SpinMutexGuard<'_, T> {
         self.0.lock()
     }
 
     #[track_caller]
-    pub(crate) fn try_lock(&self) -> Result<MutexGuard<'_, T>> {
+    pub(crate) fn try_lock(&self) -> Result<SpinMutexGuard<'_, T>> {
         Ok(self.0.try_lock().ok_or(ErrorKind::Deadlock)?)
     }
 

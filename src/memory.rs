@@ -1,6 +1,6 @@
 use crate::{
     prelude::*,
-    sync::{Mutex, MutexGuard},
+    sync::{SpinMutex, SpinMutexGuard},
 };
 use bootloader::boot_info::{MemoryRegion, MemoryRegionKind};
 use core::cmp;
@@ -32,7 +32,7 @@ pub(crate) struct BitmapMemoryManager {
     range: PhysFrameRange,
 }
 
-static MEMORY_MANAGER: Mutex<BitmapMemoryManager> = Mutex::new(BitmapMemoryManager {
+static MEMORY_MANAGER: SpinMutex<BitmapMemoryManager> = SpinMutex::new(BitmapMemoryManager {
     alloc_map: [0; ALLOC_MAP_LEN],
     range: PhysFrameRange {
         start: unsafe {
@@ -44,7 +44,7 @@ static MEMORY_MANAGER: Mutex<BitmapMemoryManager> = Mutex::new(BitmapMemoryManag
     },
 });
 
-pub(crate) fn lock_memory_manager() -> MutexGuard<'static, BitmapMemoryManager> {
+pub(crate) fn lock_memory_manager() -> SpinMutexGuard<'static, BitmapMemoryManager> {
     MEMORY_MANAGER.lock()
 }
 

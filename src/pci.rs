@@ -1,4 +1,4 @@
-use crate::{interrupt::InterruptIndex, prelude::*, sync::Mutex};
+use crate::{interrupt::InterruptIndex, prelude::*, sync::SpinMutex};
 use arrayvec::ArrayVec;
 use bit_field::BitField;
 use core::{fmt, ops::Range};
@@ -53,9 +53,9 @@ struct PortSet {
 }
 
 #[derive(Debug)]
-struct Config(Mutex<PortSet>);
+struct Config(SpinMutex<PortSet>);
 
-static CONFIG: Config = Config(Mutex::new(PortSet {
+static CONFIG: Config = Config(SpinMutex::new(PortSet {
     addr: Port::new(0x0cf8),
     data: Port::new(0xcfc),
 }));

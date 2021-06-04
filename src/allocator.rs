@@ -1,4 +1,4 @@
-use crate::{prelude::*, sync::Mutex};
+use crate::{prelude::*, sync::SpinMutex};
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem,
@@ -13,7 +13,8 @@ use x86_64::{
 };
 
 #[global_allocator]
-static ALLOCATOR: Mutex<FixedSizeBlockAllocator> = Mutex::new(FixedSizeBlockAllocator::new());
+static ALLOCATOR: SpinMutex<FixedSizeBlockAllocator> =
+    SpinMutex::new(FixedSizeBlockAllocator::new());
 
 pub const HEAP_START: usize = 0x_4444_4444_0000;
 pub const HEAP_SIZE: usize = 64 * 512 * 4096; // 128MiB
@@ -197,7 +198,7 @@ impl FixedSizeBlockAllocator {
     }
 }
 
-unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
+unsafe impl GlobalAlloc for SpinMutex<FixedSizeBlockAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Disable interrupts to prevent deadlocks.
         //

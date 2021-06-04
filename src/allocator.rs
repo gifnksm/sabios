@@ -5,6 +5,7 @@ use core::{
     ptr::{self, NonNull},
 };
 use x86_64::{
+    instructions::interrupts,
     structures::paging::{
         mapper::MapToError, FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB,
     },
@@ -102,16 +103,45 @@ impl FixedSizeBlockAllocator {
             Err(_) => ptr::null_mut(),
         }
     }
-}
 
-unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let mut allocator = self.spin_lock();
+    /// Allocate memory as described by the given `layout`.
+    ///
+    /// Returns a pointer to newly-allocated memory,
+    /// or null to indicate allocation failure.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because undefined behavior can result
+    /// if the caller does not ensure that `layout` has non-zero size.
+    ///
+    /// (Extension subtraits might provide more specific bounds on
+    /// behavior, e.g., guarantee a sentinel address or a null pointer
+    /// in response to a zero-size allocation request.)
+    ///
+    /// The allocated block of memory may or may not be initialized.
+    ///
+    /// # Errors
+    ///
+    /// Returning a null pointer indicates that either memory is exhausted
+    /// or `layout` does not meet this allocator's size or alignment constraints.
+    ///
+    /// Implementations are encouraged to return null on memory
+    /// exhaustion rather than aborting, but this is not
+    /// a strict requirement. (Specifically: it is *legal* to
+    /// implement this trait atop an underlying native allocation
+    /// library that aborts on memory exhaustion.)
+    ///
+    /// Clients wishing to abort computation in response to an
+    /// allocation error are encouraged to call the [`handle_alloc_error`] function,
+    /// rather than directly invoking `panic!` or similar.
+    ///
+    /// [`handle_alloc_error`]: alloc::alloc::handle_alloc_error
+    unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         match list_index(&layout) {
             Some(index) => {
-                match allocator.list_heads[index].take() {
+                match self.list_heads[index].take() {
                     Some(node) => {
-                        allocator.list_heads[index] = node.next.take();
+                        self.list_heads[index] = node.next.take();
                         node as *mut ListNode as *mut u8
                     }
                     None => {
@@ -121,20 +151,31 @@ unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
                         let block_align = block_size;
                         #[allow(clippy::unwrap_used)]
                         let layout = Layout::from_size_align(block_size, block_align).unwrap();
-                        allocator.fallback_alloc(layout)
+                        self.fallback_alloc(layout)
                     }
                 }
             }
-            None => allocator.fallback_alloc(layout),
+            None => self.fallback_alloc(layout),
         }
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let mut allocator = self.spin_lock();
+    /// Deallocate the block of memory at the given `ptr` pointer with the given `layout`.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because undefined behavior can result
+    /// if the caller does not ensure all of the following:
+    ///
+    /// * `ptr` must denote a block of memory currently allocated via
+    ///   this allocator,
+    ///
+    /// * `layout` must be the same layout that was used
+    ///   to allocate that block of memory.
+    unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
         match list_index(&layout) {
             Some(index) => {
                 let new_node = ListNode {
-                    next: allocator.list_heads[index].take(),
+                    next: self.list_heads[index].take(),
                 };
                 // verify that block has size and alignment required for storing node
                 assert!(mem::size_of::<ListNode>() <= BLOCK_SIZES[index]);
@@ -142,16 +183,38 @@ unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
                 let new_node_ptr = ptr as *mut ListNode;
                 unsafe {
                     new_node_ptr.write(new_node);
-                    allocator.list_heads[index] = Some(&mut *new_node_ptr);
+                    self.list_heads[index] = Some(&mut *new_node_ptr);
                 }
             }
             None => {
                 #[allow(clippy::unwrap_used)]
                 let ptr = NonNull::new(ptr).unwrap();
                 unsafe {
-                    allocator.fallback_allocator.deallocate(ptr, layout);
+                    self.fallback_allocator.deallocate(ptr, layout);
                 }
             }
         }
+    }
+}
+
+unsafe impl GlobalAlloc for Mutex<FixedSizeBlockAllocator> {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // Disable interrupts to prevent deadlocks.
+        //
+        // If a context switch occurs while another task is acquiring a lock,
+        // and the task after the switch tries to acquire a lock with interrupts
+        // disabled, a deadlock will occur. To prevent this deadlock, disable
+        // interrupts before acquiring the lock.
+        interrupts::without_interrupts(|| unsafe { self.lock().alloc(layout) })
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // Disable interrupts to prevent deadlocks.
+        //
+        // If a context switch occurs while another task is acquiring a lock,
+        // and the task after the switch tries to acquire a lock with interrupts
+        // disabled, a deadlock will occur. To prevent this deadlock, disable
+        // interrupts before acquiring the lock.
+        interrupts::without_interrupts(|| unsafe { self.lock().dealloc(ptr, layout) })
     }
 }

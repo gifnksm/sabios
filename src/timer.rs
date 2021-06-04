@@ -1,7 +1,7 @@
 pub(crate) mod lapic {
     use crate::{
         acpi,
-        interrupt::{self, InterruptIndex},
+        interrupt::{self, InterruptContextGuard, InterruptIndex},
         prelude::*,
         sync::{mpsc, oneshot, OnceCell},
         task,
@@ -215,13 +215,14 @@ pub(crate) mod lapic {
     }
 
     pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
+        let guard = InterruptContextGuard::new();
         INTERRUPTED_COUNT.fetch_add(1, Ordering::Relaxed);
         let current_count = TOTAL_INTERRUPTED_COUNT.fetch_add(1, Ordering::Relaxed);
         WAKER.wake();
         interrupt::notify_end_of_interrupt();
 
         if current_count % 2 == 0 {
-            task::on_interrupt();
+            task::on_interrupt(guard);
         }
     }
 

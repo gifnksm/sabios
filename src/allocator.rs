@@ -1,4 +1,4 @@
-use crate::{prelude::*, sync::SpinMutex};
+use crate::{interrupt, prelude::*, sync::SpinMutex};
 use core::{
     alloc::{GlobalAlloc, Layout},
     mem,
@@ -200,6 +200,8 @@ impl FixedSizeBlockAllocator {
 
 unsafe impl GlobalAlloc for SpinMutex<FixedSizeBlockAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        assert!(!interrupt::is_interrupt_context());
+
         // Disable interrupts to prevent deadlocks.
         //
         // If a context switch occurs while another task is acquiring a lock,
@@ -210,6 +212,8 @@ unsafe impl GlobalAlloc for SpinMutex<FixedSizeBlockAllocator> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        assert!(!interrupt::is_interrupt_context());
+
         // Disable interrupts to prevent deadlocks.
         //
         // If a context switch occurs while another task is acquiring a lock,

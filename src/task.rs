@@ -1,6 +1,7 @@
 use crate::{
     co_task::{CoTask, Executor},
     gdt,
+    interrupt::{self, InterruptContextGuard},
     prelude::*,
     sync::{OnceCell, SpinMutex},
 };
@@ -41,6 +42,7 @@ extern "C" fn task_entry_point(arg: *mut EntryPointArg) {
 }
 
 pub(crate) fn spawn(task: Task) -> TaskId {
+    assert!(!interrupt::is_interrupt_context());
     assert!(!interrupts::are_enabled());
 
     let task = Arc::new(task);
@@ -55,11 +57,13 @@ pub(crate) fn spawn(task: Task) -> TaskId {
 }
 
 pub(crate) fn wake(task_id: TaskId) {
+    // this function will be called by interrupt handler via WAKER
     assert!(!interrupts::are_enabled());
     TASK_MANAGER.get().lock().wake(task_id)
 }
 
 pub(crate) fn sleep(task_id: TaskId) {
+    assert!(!interrupt::is_interrupt_context());
     assert!(!interrupts::are_enabled());
     if let Some(switch_task) = TASK_MANAGER.get().with_lock(|tm| tm.sleep(task_id)) {
         switch_task.switch();
@@ -67,6 +71,7 @@ pub(crate) fn sleep(task_id: TaskId) {
 }
 
 pub(crate) fn current() -> Arc<Task> {
+    assert!(!interrupt::is_interrupt_context());
     assert!(!interrupts::are_enabled());
     TASK_MANAGER.get().lock().current_task()
 }
@@ -208,8 +213,9 @@ impl TaskManager {
     }
 }
 
-pub(crate) fn on_interrupt() {
+pub(crate) fn on_interrupt(guard: InterruptContextGuard) {
     if let Some(task_switch) = TASK_MANAGER.get().with_lock(|tm| tm.switch_context(false)) {
+        drop(guard);
         task_switch.switch();
     }
 }

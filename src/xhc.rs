@@ -1,5 +1,5 @@
 use crate::{
-    interrupt::{self, InterruptIndex},
+    interrupt::{self, InterruptContextGuard, InterruptIndex},
     keyboard, memory, mouse, paging,
     pci::{self, Device, MsiDeliveryMode, MsiTriggerMode},
     prelude::*,
@@ -140,6 +140,7 @@ impl Stream for InterruptStream {
 }
 
 pub(crate) extern "x86-interrupt" fn interrupt_handler(_stack_frame: InterruptStackFrame) {
+    let _guard = InterruptContextGuard::new();
     INTERRUPTED_FLAG.store(true, Ordering::Relaxed);
     WAKER.wake();
     interrupt::notify_end_of_interrupt();

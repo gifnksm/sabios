@@ -1,5 +1,4 @@
-use super::SpinMutex;
-
+use super::Mutex;
 use alloc::sync::Arc;
 use core::{
     future::Future,
@@ -24,7 +23,7 @@ pub(crate) struct Sender<T> {
 
 impl<T> Sender<T> {
     pub(crate) fn send(self, value: T) {
-        *self.inner.value.spin_lock() = Some(value);
+        *self.inner.value.lock() = Some(value);
         self.inner.waker.wake();
     }
 }
@@ -39,12 +38,12 @@ impl<T> Future for Receiver<T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // fast path
-        if let Some(value) = self.inner.value.spin_lock().take() {
+        if let Some(value) = self.inner.value.lock().take() {
             return Poll::Ready(value);
         }
 
         self.inner.waker.register(&cx.waker());
-        if let Some(value) = self.inner.value.spin_lock().take() {
+        if let Some(value) = self.inner.value.lock().take() {
             self.inner.waker.take();
             Poll::Ready(value)
         } else {
@@ -55,14 +54,14 @@ impl<T> Future for Receiver<T> {
 
 #[derive(Debug)]
 struct Inner<T> {
-    value: SpinMutex<Option<T>>,
+    value: Mutex<Option<T>>,
     waker: AtomicWaker,
 }
 
 impl<T> Inner<T> {
     fn new() -> Self {
         Self {
-            value: SpinMutex::new(None),
+            value: Mutex::new(None),
             waker: AtomicWaker::new(),
         }
     }

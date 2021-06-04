@@ -48,10 +48,13 @@ pub(crate) fn spawn(task: Task) -> TaskId {
     let task = Arc::new(task);
     let task_id = task.id;
 
-    TASK_MANAGER.get().with_lock(|task_manager| {
+    let switch_task = TASK_MANAGER.get().with_lock(|task_manager| {
         task_manager.spawn(task);
-        task_manager.wake(task_id);
+        task_manager.wake(task_id)
     });
+    if let Some(switch_task) = switch_task {
+        switch_task.switch();
+    }
 
     task_id
 }
@@ -59,7 +62,9 @@ pub(crate) fn spawn(task: Task) -> TaskId {
 pub(crate) fn wake(task_id: TaskId) {
     // this function will be called by interrupt handler via WAKER
     assert!(!interrupts::are_enabled());
-    TASK_MANAGER.get().lock().wake(task_id)
+    if let Some(switch_task) = TASK_MANAGER.get().with_lock(|tm| tm.wake(task_id)) {
+        switch_task.switch();
+    }
 }
 
 pub(crate) fn sleep(task_id: TaskId) {
@@ -141,6 +146,7 @@ impl TaskManager {
         }
     }
 
+    #[must_use]
     fn switch_context(&mut self, sleep_current: bool) -> Option<SwitchTask> {
         let current_task = self.current_task();
         let next_task_level = if sleep_current {
@@ -166,20 +172,27 @@ impl TaskManager {
         })
     }
 
-    fn wake(&mut self, task_id: TaskId) {
-        let task = match self.tasks.get(&task_id) {
-            Some(task) => task,
-            None => return, // finished task
-        };
+    #[must_use]
+    fn wake(&mut self, task_id: TaskId) -> Option<SwitchTask> {
+        let task = self.tasks.get(&task_id)?; // return if task finished
         let level = task.level();
         if self.current_task_id == task_id || self.wake_queue[level].contains(&task_id) {
             // already running or requested to wake
-            return;
+            return None;
         }
+
         // request to wake
         self.wake_queue[level].push_back(task_id);
+
+        // if the task has higher level than current task, switch to the task immediately
+        if !interrupt::is_interrupt_context() && level > self.current_task().level() {
+            self.switch_context(false)
+        } else {
+            None
+        }
     }
 
+    #[must_use]
     fn sleep(&mut self, task_id: TaskId) -> Option<SwitchTask> {
         if self.current_task_id == task_id {
             // sleep running task

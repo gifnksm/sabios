@@ -203,7 +203,7 @@ pub(crate) mod lapic {
                 return Poll::Ready(Some(count));
             }
 
-            WAKER.register(&cx.waker());
+            WAKER.register(cx.waker());
             let count = INTERRUPTED_COUNT.swap(0, Ordering::Relaxed);
             if count > 0 {
                 WAKER.take();

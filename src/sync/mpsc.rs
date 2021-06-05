@@ -51,7 +51,7 @@ impl<T> Stream for Receiver<T> {
             return Poll::Ready(Some(value));
         }
 
-        self.inner.waker.register(&cx.waker());
+        self.inner.waker.register(cx.waker());
         if let Some(value) = self.inner.queue.pop() {
             self.inner.waker.take();
             Poll::Ready(Some(value))

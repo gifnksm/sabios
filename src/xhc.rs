@@ -43,7 +43,7 @@ pub(crate) fn init(devices: &[Device], mapper: &mut OffsetPageTable) -> Result<(
         0,
     )?;
 
-    let xhc_bar = pci::read_bar(&xhc_dev, 0)?;
+    let xhc_bar = pci::read_bar(xhc_dev, 0)?;
     debug!("xHC BAR0 = {:08x}", xhc_bar);
     let xhc_mmio_base = xhc_bar & !0xf;
     debug!("xHC mmio_base = {:08x}", xhc_mmio_base);
@@ -129,7 +129,7 @@ impl Stream for InterruptStream {
             return Poll::Ready(Some(()));
         }
 
-        WAKER.register(&cx.waker());
+        WAKER.register(cx.waker());
         if INTERRUPTED_FLAG.swap(false, Ordering::Relaxed) {
             WAKER.take();
             Poll::Ready(Some(()))

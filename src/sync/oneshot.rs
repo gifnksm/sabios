@@ -42,7 +42,7 @@ impl<T> Future for Receiver<T> {
             return Poll::Ready(value);
         }
 
-        self.inner.waker.register(&cx.waker());
+        self.inner.waker.register(cx.waker());
         if let Some(value) = self.inner.value.lock().take() {
             self.inner.waker.take();
             Poll::Ready(value)

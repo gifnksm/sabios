@@ -121,7 +121,7 @@ impl fmt::Display for Device {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}.{}.{}: vend {:04x}, class {}, head {:02x}",
+            "{:02x}.{:02x}.{:02x} vend={:04x}, class={}, head={:02x}",
             self.bus, self.device, self.function, self.vendor_id, self.class_code, self.header_type
         )
     }

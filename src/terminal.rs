@@ -1,12 +1,15 @@
-use core::mem;
-
 use crate::{
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{font, Color, Draw, Offset, Point, Rectangle, Size},
+    pci,
     prelude::*,
     timer,
 };
 use alloc::{string::String, vec::Vec};
+use core::{
+    fmt::{self, Write as _},
+    mem,
+};
 use futures_util::select_biased;
 
 const FOREGROUND: Color = Color::WHITE;
@@ -156,10 +159,18 @@ impl Terminal {
                 );
                 self.cursor = Point::new(0, 0);
             }
+            "lspci" => match pci::scan_all_bus() {
+                Ok(devices) => {
+                    for dev in devices {
+                        let _ = writeln!(self, "{}", dev);
+                    }
+                }
+                Err(err) => {
+                    let _ = writeln!(self, "lspci: failed to scan PCI devices: {}", err);
+                }
+            },
             command => {
-                self.print_str("no such command: ");
-                self.print_str(command);
-                self.print_char('\n');
+                let _ = writeln!(self, "no such command: {}", command);
             }
         }
         self.line_buf = line_buf;
@@ -222,5 +233,12 @@ impl Terminal {
             }
             self.window.flush().await?;
         }
+    }
+}
+
+impl fmt::Write for Terminal {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.print_str(s);
+        Ok(())
     }
 }

@@ -1,10 +1,12 @@
+use core::mem;
+
 use crate::{
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{font, Color, Draw, Offset, Point, Rectangle, Size},
     prelude::*,
     timer,
 };
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use futures_util::select_biased;
 
 const BACKGROUND: Color = Color::BLACK;
@@ -81,50 +83,99 @@ impl Terminal {
         );
     }
 
-    fn handle_event(&mut self, event: FramedWindowEvent) {
+    fn newline(&mut self) {
+        if self.cursor.y + 1 >= self.text_size.y {
+            self.scroll1();
+        } else {
+            self.cursor.y += 1;
+        }
+        self.cursor.x = 0;
+    }
+
+    fn print_char(&mut self, ch: char) {
+        self.draw_cursor(false);
+        match ch {
+            '\0' => {}
+            '\n' => self.newline(),
+            ch => {
+                self.window.draw_char(self.insert_pos(), ch, Color::WHITE);
+                if self.cursor.x + 1 >= self.text_size.x {
+                    self.newline();
+                } else {
+                    self.cursor.x += 1;
+                }
+            }
+        }
+    }
+
+    fn print_str(&mut self, s: &str) {
+        for ch in s.chars() {
+            self.print_char(ch);
+        }
+    }
+
+    fn print_prompt(&mut self) {
+        self.print_str("> ");
+    }
+
+    fn delete_backward(&mut self) {
         let font_size = font::FONT_PIXEL_SIZE;
+        if self.cursor.x == 0 {
+            self.cursor.x = self.text_size.x - 1;
+            self.cursor.y -= 1;
+        } else {
+            self.cursor.x -= 1;
+        }
+        self.window
+            .fill_rect(Rectangle::new(self.insert_pos(), font_size), Color::BLACK);
+    }
+
+    fn execute_line(&mut self) {
+        // replace line_buf temporary to avoid borrow checker errors
+        let line_buf = mem::take(&mut self.line_buf);
+        let command_line = line_buf.trim().split_whitespace().collect::<Vec<_>>();
+        if command_line.is_empty() {
+            return;
+        }
+        match command_line[0] {
+            "echo" => {
+                for (i, arg) in command_line[1..].iter().enumerate() {
+                    if i > 0 {
+                        self.print_char(' ');
+                    }
+                    self.print_str(arg);
+                }
+                self.print_char('\n');
+            }
+            command => {
+                self.print_str("no such command: ");
+                self.print_str(command);
+                self.print_char('\n');
+            }
+        }
+        self.line_buf = line_buf;
+    }
+
+    fn handle_event(&mut self, event: FramedWindowEvent) {
         match event {
             FramedWindowEvent::Keyboard(event) => {
                 self.draw_cursor(false);
                 match event.ascii {
                     '\0' => {}
                     '\n' => {
-                        warn!("line: {}", self.line_buf);
+                        self.newline();
+                        self.execute_line();
                         self.line_buf.clear();
-                        if self.cursor.y + 1 >= self.text_size.y {
-                            self.scroll1();
-                        } else {
-                            self.cursor.y += 1;
-                        }
-                        self.cursor.x = 0;
+                        self.print_prompt();
                     }
                     '\x08' => {
                         if self.line_buf.pop().is_some() {
-                            if self.cursor.x == 0 {
-                                self.cursor.x = self.text_size.x - 1;
-                                self.cursor.y -= 1;
-                            } else {
-                                self.cursor.x -= 1;
-                            }
-                            self.window.fill_rect(
-                                Rectangle::new(self.insert_pos(), font_size),
-                                Color::BLACK,
-                            );
+                            self.delete_backward();
                         }
                     }
                     ch => {
                         self.line_buf.push(ch);
-                        self.window.draw_char(self.insert_pos(), ch, Color::WHITE);
-                        if self.cursor.x + 1 >= self.text_size.x {
-                            if self.cursor.y + 1 >= self.text_size.y {
-                                self.scroll1();
-                            } else {
-                                self.cursor.y += 1;
-                            }
-                            self.cursor.x = 0;
-                        } else {
-                            self.cursor.x += 1;
-                        }
+                        self.print_char(ch);
                     }
                 }
                 self.draw_cursor(true);
@@ -139,6 +190,7 @@ impl Terminal {
 
     pub(crate) async fn run(mut self) -> Result<()> {
         self.draw_terminal();
+        self.print_prompt();
         self.window.flush().await?;
 
         let mut interval = timer::lapic::interval(0, 50)?;

@@ -83,10 +83,8 @@ impl Draw for FramedWindow {
             let dst = (((src & self.area())? + offset) & self.area())?;
             let src = dst - offset;
 
-            self.window.move_area(
-                offset + PADDING_POS,
-                Rectangle::new(src.pos + PADDING_POS, src.size),
-            );
+            self.window
+                .move_area(offset, Rectangle::new(src.pos + PADDING_POS, src.size));
 
             Some(())
         })();

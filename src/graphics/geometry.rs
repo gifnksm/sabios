@@ -1,6 +1,6 @@
 use core::{
     fmt, iter,
-    ops::{Add, AddAssign, BitAnd, BitOr, Neg, Range, Sub, SubAssign},
+    ops::{Add, AddAssign, BitAnd, BitOr, Mul, Neg, Range, Sub, SubAssign},
 };
 use num_traits::One;
 
@@ -115,6 +115,20 @@ where
     fn sub_assign(&mut self, rhs: Vector2d<U>) {
         self.x -= rhs.x;
         self.y -= rhs.y;
+    }
+}
+
+impl<T, U> Mul<Vector2d<U>> for Vector2d<T>
+where
+    T: Mul<U>,
+{
+    type Output = Vector2d<T::Output>;
+
+    fn mul(self, rhs: Vector2d<U>) -> Self::Output {
+        Vector2d {
+            x: self.x * rhs.x,
+            y: self.y * rhs.y,
+        }
     }
 }
 

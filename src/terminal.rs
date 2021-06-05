@@ -9,6 +9,7 @@ use crate::{
 use alloc::{string::String, vec::Vec};
 use futures_util::select_biased;
 
+const FOREGROUND: Color = Color::WHITE;
 const BACKGROUND: Color = Color::BLACK;
 const BORDER_DARK: Color = Color::from_code(0x848484);
 const BORDER_LIGHT: Color = Color::from_code(0xc6c6c6);
@@ -59,7 +60,7 @@ impl Terminal {
 
     fn draw_cursor(&mut self, visible: bool) {
         let font_size = font::FONT_PIXEL_SIZE;
-        let color = if visible { Color::WHITE } else { Color::BLACK };
+        let color = if visible { FOREGROUND } else { BACKGROUND };
         let pos = self.insert_pos();
         self.window
             .fill_rect(Rectangle::new(pos, font_size - Size::new(1, 1)), color);
@@ -79,7 +80,7 @@ impl Terminal {
                 Offset::new(0, self.text_size.y - 1) * font_size + PADDING_POS,
                 Size::new(self.text_size.x, 1) * font_size,
             ),
-            Color::BLACK,
+            BACKGROUND,
         );
     }
 
@@ -98,7 +99,7 @@ impl Terminal {
             '\0' => {}
             '\n' => self.newline(),
             ch => {
-                self.window.draw_char(self.insert_pos(), ch, Color::WHITE);
+                self.window.draw_char(self.insert_pos(), ch, FOREGROUND);
                 if self.cursor.x + 1 >= self.text_size.x {
                     self.newline();
                 } else {
@@ -127,7 +128,7 @@ impl Terminal {
             self.cursor.x -= 1;
         }
         self.window
-            .fill_rect(Rectangle::new(self.insert_pos(), font_size), Color::BLACK);
+            .fill_rect(Rectangle::new(self.insert_pos(), font_size), BACKGROUND);
     }
 
     fn execute_line(&mut self) {
@@ -146,6 +147,14 @@ impl Terminal {
                     self.print_str(arg);
                 }
                 self.print_char('\n');
+            }
+            "clear" => {
+                let font_size = font::FONT_PIXEL_SIZE;
+                self.window.fill_rect(
+                    Rectangle::new(PADDING_POS, font_size * self.text_size),
+                    BACKGROUND,
+                );
+                self.cursor = Point::new(0, 0);
             }
             command => {
                 self.print_str("no such command: ");

@@ -5,7 +5,7 @@ use crate::{
     prelude::*,
     timer,
 };
-use alloc::{string::String, vec::Vec};
+use alloc::{collections::VecDeque, string::String, vec::Vec};
 use core::{
     fmt::{self, Write as _},
     mem,
@@ -24,6 +24,13 @@ const PADDING_RIGHT: i32 = 4;
 const PADDING_POS: Point<i32> = Point::new(PADDING_LEFT, PADDING_TOP);
 const PADDING_SIZE: Size<i32> =
     Size::new(PADDING_LEFT + PADDING_RIGHT, PADDING_TOP + PADDING_BOTTOM);
+const HISTORY_LEN: usize = 8;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Older,
+    Newer,
+}
 
 #[derive(Debug)]
 pub(crate) struct Terminal {
@@ -31,6 +38,8 @@ pub(crate) struct Terminal {
     cursor: Point<i32>,
     cursor_visible: bool,
     line_buf: String,
+    history: VecDeque<String>,
+    history_index: Option<usize>,
     window: FramedWindow,
 }
 
@@ -46,6 +55,8 @@ impl Terminal {
             cursor: Point::new(0, 0),
             cursor_visible: false,
             line_buf: String::new(),
+            history: VecDeque::with_capacity(HISTORY_LEN),
+            history_index: None,
             window,
         })
     }
@@ -124,11 +135,13 @@ impl Terminal {
 
     fn delete_backward(&mut self) {
         let font_size = font::FONT_PIXEL_SIZE;
-        if self.cursor.x == 0 {
+        if self.cursor.y > 0 && self.cursor.x == 0 {
             self.cursor.x = self.text_size.x - 1;
             self.cursor.y -= 1;
-        } else {
+        } else if self.cursor.x > 0 {
             self.cursor.x -= 1;
+        } else {
+            assert_eq!(self.cursor, Point::new(0, 0));
         }
         self.window
             .fill_rect(Rectangle::new(self.insert_pos(), font_size), BACKGROUND);
@@ -176,16 +189,64 @@ impl Terminal {
         self.line_buf = line_buf;
     }
 
+    fn push_history(&mut self) {
+        while self.history.len() > HISTORY_LEN - 1 {
+            self.history.pop_back();
+        }
+        self.history.push_front(mem::take(&mut self.line_buf));
+        self.history_index = None;
+    }
+
+    fn history_move(&mut self, direction: Direction) {
+        self.history_index = match direction {
+            Direction::Newer => match self.history_index {
+                None => return,
+                Some(i) if i == 0 => None,
+                Some(i) => Some(i - 1),
+            },
+            Direction::Older => match self.history_index {
+                None => Some(0),
+                Some(i) if i + 1 < self.history.len() => Some(i + 1),
+                Some(_) => return,
+            },
+        };
+
+        while self.line_buf.pop().is_some() {
+            self.delete_backward();
+        }
+        self.cursor.x = 0;
+        self.print_prompt();
+        if let Some(history_index) = self.history_index {
+            let line = self.history[history_index].clone();
+            self.print_str(&line);
+            self.line_buf = line;
+        } else {
+            self.line_buf.clear();
+        }
+    }
+
     fn handle_event(&mut self, event: FramedWindowEvent) {
         match event {
             FramedWindowEvent::Keyboard(event) => {
                 self.draw_cursor(false);
                 match event.ascii {
+                    '\0' if event.keycode == 0x51 => {
+                        // down arrow
+                        self.history_move(Direction::Newer);
+                    }
+                    '\0' if event.keycode == 0x52 => {
+                        // up arrow
+                        self.history_move(Direction::Older);
+                    }
                     '\0' => {}
                     '\n' => {
                         self.newline();
                         self.execute_line();
-                        self.line_buf.clear();
+                        if !self.line_buf.is_empty()
+                            && !self.line_buf.starts_with(char::is_whitespace)
+                        {
+                            self.push_history();
+                        }
                         self.print_prompt();
                     }
                     '\x08' => {

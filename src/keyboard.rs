@@ -1,4 +1,5 @@
 use crate::{
+    layer,
     prelude::*,
     sync::{mpsc, OnceCell},
 };
@@ -120,7 +121,7 @@ pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
     KEYBOARD_EVENT_TX.init_once(|| tx);
 
     async move {
-        let tx = crate::KEYBOARD_EVENT_TX.get();
+        let tx = layer::event_tx();
 
         while let Some(event) = rx.next().await {
             let ascii = if event
@@ -136,7 +137,7 @@ pub(crate) fn handler_task() -> impl Future<Output = Result<()>> {
                 keycode: event.keycode,
                 ascii,
             };
-            tx.send(event)?;
+            tx.keyboard_event(event).await?;
         }
         Ok(())
     }

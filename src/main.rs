@@ -28,7 +28,6 @@ use bootloader::{
     entry_point, BootInfo,
 };
 use core::{mem, panic::PanicInfo};
-use sync::{mpsc, OnceCell};
 use x86_64::VirtAddr;
 
 mod acpi;
@@ -113,8 +112,6 @@ fn init(boot_info: &'static mut BootInfo) -> Result<()> {
     Ok(())
 }
 
-static KEYBOARD_EVENT_TX: OnceCell<mpsc::Sender<keyboard::KeyboardEvent>> = OnceCell::uninit();
-
 #[allow(clippy::expect_used)]
 fn start_window() -> ! {
     let layer_task = layer::handler_task().unwrap();
@@ -150,16 +147,6 @@ fn start_window() -> ! {
         .run()
         .unwrap(),
     ));
-
-    let (tx, mut rx) = mpsc::channel(100);
-    KEYBOARD_EVENT_TX.init_once(|| tx);
-    executor.spawn(CoTask::new(async move {
-        let layer_tx = layer::event_tx();
-        while let Some(event) = rx.next().await {
-            #[allow(clippy::unwrap_used)]
-            layer_tx.keyboard_event(event).await.unwrap();
-        }
-    }));
 
     x86_64::instructions::interrupts::enable();
 

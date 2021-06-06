@@ -80,8 +80,12 @@ where
         {
             while self.is_locked() {
                 assert!(interrupts::are_enabled());
-                self.queue.push(task_id);
-                interrupts::without_interrupts(|| task::sleep(task_id));
+                interrupts::without_interrupts(|| {
+                    if self.is_locked() {
+                        self.queue.push(task_id);
+                        task::sleep(task_id);
+                    }
+                });
             }
         }
 

@@ -17,7 +17,6 @@ extern crate alloc;
 
 use self::{
     co_task::{CoTask, Executor},
-    counter_window::CounterWindow,
     graphics::{Point, Size},
     prelude::*,
     task::Task,
@@ -36,7 +35,6 @@ mod acpi;
 mod allocator;
 mod co_task;
 mod console;
-mod counter_window;
 mod cxx_support;
 mod desktop;
 mod emergency_console;
@@ -134,38 +132,9 @@ fn start_window() -> ! {
     executor.spawn(CoTask::new(console::handler_task(console_param).unwrap()));
     executor.spawn(CoTask::new(layer_task));
 
-    executor.spawn(CoTask::new(async {
-        #[allow(clippy::unwrap_used)]
-        let timeout = timer::lapic::oneshot(600).unwrap();
-        println!("Timer interrupt, timeout = {}", timeout.await);
-    }));
-    executor.spawn(CoTask::new(async {
-        let mut i = 0;
-        #[allow(clippy::unwrap_used)]
-        let mut timer = timer::lapic::interval(200, 100).unwrap();
-        while let Some(Ok(timeout)) = timer.next().await {
-            println!("Timer interrupt, timeout = {}, value = {}", timeout, i);
-            i += 1;
-        }
-    }));
-
-    #[allow(clippy::unwrap_used)]
-    task::spawn(Task::new(
-        CounterWindow::new("Hello Window".into(), Point::new(300, 100))
-            .unwrap()
-            .run()
-            .unwrap(),
-    ));
     #[allow(clippy::unwrap_used)]
     task::spawn(Task::new(
         TextWindow::new("Text Box test".into(), Point::new(500, 100))
-            .unwrap()
-            .run()
-            .unwrap(),
-    ));
-    #[allow(clippy::unwrap_used)]
-    let task_b_id = task::spawn(Task::new(
-        CounterWindow::new("TaskB Window".into(), Point::new(100, 100))
             .unwrap()
             .run()
             .unwrap(),
@@ -187,15 +156,6 @@ fn start_window() -> ! {
     executor.spawn(CoTask::new(async move {
         let layer_tx = layer::event_tx();
         while let Some(event) = rx.next().await {
-            match event.ascii {
-                's' => {
-                    x86_64::instructions::interrupts::without_interrupts(|| task::sleep(task_b_id));
-                }
-                'w' => {
-                    x86_64::instructions::interrupts::without_interrupts(|| task::wake(task_b_id));
-                }
-                _ => {}
-            }
             #[allow(clippy::unwrap_used)]
             layer_tx.keyboard_event(event).await.unwrap();
         }

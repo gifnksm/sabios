@@ -18,7 +18,7 @@ resolver = "2"
 debug = true
 
 [dependencies]
-arrayvec = { version = "0.7.0", default-features = false }
+arrayvec = { version = "0.7.1", default-features = false }
 bit_field = "0.10.1"
 bootloader = "0.10.6"
 conquer-once = { version = "0.3.2", default-features = false }

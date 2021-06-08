@@ -42,6 +42,14 @@ Following tools are required:
 
 [`boot` crate]: boot
 
+## References
+
+* [Microsoft Extensible Firmware Initiative FAT32 File System Specification][FAT32]
+  * [Japanese Translation][FAT32-JA]
+
+[FAT32]: https://download.microsoft.com/download/1/6/1/161ba512-40e2-4cc9-843a-923143f3456c/fatgen103.doc
+[FAT32-JA]: https://docs.google.com/document/d/1ba8Jyfm4GmNgADNscqOgS9gZ9CPUgvCZSt1xRDuFV24/edit?usp=sharing
+
 ## License
 
 Licensed under either of

@@ -1,4 +1,6 @@
 use crate::{
+    fat::{self, FileAttribute},
+    fmt::ByteString,
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{font, Color, Draw, Offset, Point, Rectangle, Size},
     pci,
@@ -182,6 +184,22 @@ impl Terminal {
                     let _ = writeln!(self, "lspci: failed to scan PCI devices: {}", err);
                 }
             },
+            "ls" => {
+                let fs = fat::lock();
+                for entry in fs.root_dir_entries() {
+                    let basename = entry.basename();
+                    let extension = entry.extension();
+                    if entry.attr() == FileAttribute::LFN {
+                        continue;
+                    }
+                    if extension.is_empty() {
+                        let _ = writeln!(self, "{}", ByteString(basename));
+                    } else {
+                        let _ =
+                            writeln!(self, "{}.{}", ByteString(basename), ByteString(extension));
+                    }
+                }
+            }
             command => {
                 let _ = writeln!(self, "no such command: {}", command);
             }

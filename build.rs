@@ -1,12 +1,14 @@
+use color_eyre::eyre::{eyre, Result};
+use fatfs::{FileSystem, FormatVolumeOptions, FsOptions};
+use fscommon::BufStream;
+use llvm_tools::LlvmTools;
 use std::{
     env,
-    fs::File,
+    fs::{File, OpenOptions},
     io::{prelude::*, BufReader, BufWriter},
     path::Path,
+    process::Command,
 };
-
-type Error = Box<dyn std::error::Error>;
-type Result<T> = std::result::Result<T, Error>;
 
 fn build_ascii_font() -> Result<()> {
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -69,7 +71,75 @@ fn build_ascii_font() -> Result<()> {
     Ok(())
 }
 
+fn build_fs() -> Result<()> {
+    let llvm_tools = LlvmTools::new().map_err(|err| eyre!("{:?}", err))?;
+    let objcopy = llvm_tools
+        .tool(&llvm_tools::exe("llvm-objcopy"))
+        .ok_or_else(|| eyre!("llvm0objcopy not found"))?;
+    let ar = llvm_tools
+        .tool(&llvm_tools::exe("llvm-ar"))
+        .ok_or_else(|| eyre!("llvm-ar not found"))?;
+
+    let fs_size = 16 * 1024 * 1024; // 16MiB
+    let out_dir = env::var("OUT_DIR")?;
+    let fat_path = Path::new(&out_dir).join("fs.fat");
+    let obj_path = Path::new(&out_dir).join("fs.o");
+    let lib_path = Path::new(&out_dir).join("libfs.a");
+    let fat_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&fat_path)?;
+    fat_file.set_len(fs_size)?;
+    let mut fat_file = BufStream::new(fat_file);
+
+    // create new FAT partition
+    let format_options = FormatVolumeOptions::new().volume_label(*b"sabios     ");
+    fatfs::format_volume(&mut fat_file, format_options)?;
+
+    // copy files to FAT filesystem
+    let partition = FileSystem::new(&mut fat_file, FsOptions::new())?;
+    let root_dir = partition.root_dir();
+    root_dir.create_dir("bin")?;
+    let mut sabios = root_dir.create_file("sabios.txt")?;
+    sabios.truncate()?;
+    writeln!(&mut sabios, "hello sabios!")?;
+
+    // create object file
+    let mut objcopy_cmd = Command::new(objcopy);
+    objcopy_cmd
+        .current_dir(&out_dir)
+        .arg("-I")
+        .arg("binary")
+        .arg("-O")
+        .arg("elf64-x86-64")
+        .arg("-B")
+        .arg("i386:x86-64")
+        .arg(fat_path.file_name().unwrap())
+        .arg(obj_path.file_name().unwrap());
+    let objcopy_status = objcopy_cmd.status()?;
+    assert!(objcopy_status.success(), "objcopy failed");
+
+    let mut ar_cmd = Command::new(ar);
+    ar_cmd
+        .current_dir(&out_dir)
+        .arg("crus")
+        .arg(lib_path)
+        .arg(obj_path);
+    let ar_status = ar_cmd.status()?;
+    assert!(ar_status.success(), "ar failed");
+
+    println!("cargo:rustc-link-search=native={}", out_dir);
+    println!("cargo:rustc-link-lib=static=fs");
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    color_eyre::install()?;
+
     build_ascii_font()?;
+    build_fs()?;
     Ok(())
 }

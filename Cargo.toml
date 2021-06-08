@@ -37,6 +37,12 @@ uart_16550 = "0.2.14"
 volatile = "0.4.4"
 x86_64 = "0.14.3"
 
+[build-dependencies]
+color-eyre = "0.5.11"
+fatfs = "0.3.5"
+fscommon = "0.1.1"
+llvm-tools = "0.1.1"
+
 [package.metadata.bootloader]
 map-physical-memory = true
 

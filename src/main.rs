@@ -38,6 +38,7 @@ mod cxx_support;
 mod desktop;
 mod emergency_console;
 mod error;
+mod fat;
 mod framed_window;
 mod gdt;
 mod graphics;
@@ -104,6 +105,9 @@ fn init(boot_info: &'static mut BootInfo) -> Result<()> {
     // Initialize LAPIC timer
     unsafe { acpi::init(&mut mapper, rsdp) }?;
     timer::lapic::init();
+
+    // Initialize file system
+    fat::init();
 
     task::init();
 

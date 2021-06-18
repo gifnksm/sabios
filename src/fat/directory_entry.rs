@@ -1,5 +1,5 @@
 use crate::byte_getter;
-use core::{fmt, mem, slice};
+use core::{fmt, mem};
 use enumflags2::{bitflags, make_bitflags, BitFlags};
 
 #[bitflags]
@@ -37,7 +37,7 @@ static_assertions::const_assert_eq!(mem::size_of::<DirectoryEntry>(), 32);
 static_assertions::const_assert_eq!(mem::align_of::<DirectoryEntry>(), 1);
 
 impl DirectoryEntry {
-    byte_getter!(name: [u8; 11]);
+    byte_getter!(pub(super) name: [u8; 11]);
     pub(crate) fn attr(&self) -> BitFlags<FileAttribute> {
         BitFlags::from_bits_truncate(u8::from_le_bytes(self.attr))
     }
@@ -87,37 +87,5 @@ impl DirectoryEntry {
 
     pub(crate) fn extension(&self) -> &[u8] {
         trim_trailing(&self.name[8..], 0x20)
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct DirectoryEntries<'a> {
-    iter: slice::Iter<'a, DirectoryEntry>,
-}
-
-impl<'a> DirectoryEntries<'a> {
-    pub(super) fn new(entries: &'a [DirectoryEntry]) -> Self {
-        Self {
-            iter: entries.iter(),
-        }
-    }
-}
-
-impl<'a> Iterator for DirectoryEntries<'a> {
-    type Item = &'a DirectoryEntry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        for entry in self.iter.by_ref() {
-            if entry.name[0] == 0x00 {
-                // stop iteration
-                self.iter = self.iter.as_slice()[..0].iter();
-                break;
-            }
-            if entry.name[0] == 0xe5 {
-                continue;
-            }
-            return Some(entry);
-        }
-        None
     }
 }

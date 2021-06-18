@@ -1,5 +1,5 @@
 use crate::{
-    fat::{self, FileAttribute},
+    fat,
     fmt::ByteString,
     framed_window::{FramedWindow, FramedWindowEvent},
     graphics::{font, Color, Draw, Offset, Point, Rectangle, Size},
@@ -186,12 +186,16 @@ impl Terminal {
             },
             "ls" => {
                 let fs = fat::lock();
-                for entry in fs.root_dir_entries() {
+                for entry in fs.root_dir().entries() {
+                    let entry = match entry {
+                        Ok(entry) => entry,
+                        Err(_) => {
+                            let _ = writeln!(self, "failed to read directory");
+                            break;
+                        }
+                    };
                     let basename = entry.basename();
                     let extension = entry.extension();
-                    if entry.attr() == FileAttribute::LFN {
-                        continue;
-                    }
                     if extension.is_empty() {
                         let _ = writeln!(self, "{}", ByteString(basename));
                     } else {

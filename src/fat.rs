@@ -1,12 +1,14 @@
+pub(crate) use self::{bpb::*, cluster_chain::*, directory::*, directory_entry::*, fat_entry::*};
 use crate::{
     prelude::*,
     sync::{Mutex, MutexGuard, OnceCell},
 };
 
-pub(crate) use self::{bpb::*, directory_entry::*};
-
 mod bpb;
+mod cluster_chain;
+mod directory;
 mod directory_entry;
+mod fat_entry;
 
 #[derive(Debug)]
 pub(crate) enum FatType {

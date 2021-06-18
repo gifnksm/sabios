@@ -1,3 +1,4 @@
+use super::{ClusterChain, Directory, DirectoryEntry, FatEntry, FatType};
 use crate::{
     byte_getter,
     fmt::{ByteArray, ByteString},
@@ -5,10 +6,10 @@ use crate::{
 use core::{
     convert::TryFrom,
     fmt::{self, DebugStruct},
-    mem, slice,
+    mem,
+    ops::Range,
+    slice,
 };
-
-use super::{DirectoryEntries, DirectoryEntry, FatType};
 
 #[repr(C)]
 pub(crate) struct BpbCommon {
@@ -200,7 +201,30 @@ pub(crate) trait BiosParameterBlock: fmt::Debug + Send {
     fn fat_type(&self) -> FatType;
     fn as_common(&self) -> &BpbCommon;
     fn fat_size(&self) -> u32;
-    fn root_dir_entries(&self) -> DirectoryEntries;
+    fn fat_entry(&self, cluster: u32) -> FatEntry;
+    fn root_dir(&self) -> Directory;
+
+    fn as_bytes(&self) -> &[u8] {
+        let bytes_per_sector = usize::from(self.bytes_per_sector());
+        #[allow(clippy::unwrap_used)]
+        let total_sectors = usize::try_from(self.total_sectors()).unwrap();
+
+        let data = self as *const Self as *const u8;
+        let len = total_sectors * bytes_per_sector;
+        unsafe { slice::from_raw_parts(data, len) }
+    }
+
+    fn sectors_bytes(&self, sector_range: Range<u32>) -> &[u8] {
+        assert!(sector_range.end <= self.total_sectors());
+
+        let bytes_per_sector = usize::from(self.bytes_per_sector());
+        #[allow(clippy::unwrap_used)]
+        let start = usize::try_from(sector_range.start).unwrap();
+        #[allow(clippy::unwrap_used)]
+        let end = usize::try_from(sector_range.end).unwrap();
+
+        &self.as_bytes()[(start * bytes_per_sector)..(end * bytes_per_sector)]
+    }
 
     fn bytes_per_sector(&self) -> u16 {
         self.as_common().bytes_per_sector()
@@ -235,12 +259,26 @@ pub(crate) trait BiosParameterBlock: fmt::Debug + Send {
         u32::from(self.reserved_sector_count())
     }
 
+    fn fat_bytes(&self) -> &[u8] {
+        let start = self.fat_start_sector();
+        let end = start + self.fat_size();
+        self.sectors_bytes(start..end)
+    }
+
     fn root_dir_start_sector_16(&self) -> u32 {
         let num_fats = u32::from(self.num_fats());
         let fat_size = self.fat_size();
 
         let fat_sectors = num_fats * fat_size;
         self.fat_start_sector() + fat_sectors
+    }
+
+    fn root_dir_entries_16(&self) -> &[DirectoryEntry] {
+        #[allow(clippy::unwrap_used)]
+        let root_entry_count = usize::try_from(self.root_entry_count()).unwrap();
+
+        let data = self.sector_ptr(self.root_dir_start_sector_16());
+        unsafe { slice::from_raw_parts(data.cast(), root_entry_count) }
     }
 
     fn data_start_sector(&self) -> u32 {
@@ -274,6 +312,13 @@ pub(crate) trait BiosParameterBlock: fmt::Debug + Send {
         let count = sector * bytes_per_sector;
         unsafe { (self as *const Self as *const u8).add(count) }
     }
+
+    fn cluster_chain(&self, cluster: u32) -> ClusterChain
+    where
+        Self: Sized,
+    {
+        ClusterChain::new(self, cluster)
+    }
 }
 static_assertions::assert_obj_safe!(BiosParameterBlock);
 
@@ -296,14 +341,24 @@ impl BiosParameterBlock for BpbFat12 {
         self.0.fat_size()
     }
 
-    fn root_dir_entries(&self) -> DirectoryEntries {
-        let root_dir_start_sector = self.root_dir_start_sector_16();
-        let ptr = self
-            .sector_ptr(root_dir_start_sector)
-            .cast::<DirectoryEntry>();
-        let root_entry_count = usize::from(self.root_entry_count());
-        let entries = unsafe { slice::from_raw_parts(ptr, root_entry_count) };
-        DirectoryEntries::new(entries)
+    fn fat_entry(&self, cluster: u32) -> FatEntry {
+        #[allow(clippy::unwrap_used)]
+        let cluster = usize::try_from(cluster).unwrap();
+        let fat_bytes = self.fat_bytes();
+
+        let bytes = &fat_bytes[cluster + cluster / 2..];
+        let a = u16::from(bytes[0]);
+        let b = u16::from(bytes[1]);
+        let value = if cluster % 2 == 0 {
+            a | ((b & 0xf) << 8)
+        } else {
+            (a >> 4) & (b << 4)
+        };
+        FatEntry::from_fat12(value)
+    }
+
+    fn root_dir(&self) -> Directory {
+        Directory::new_root_dir(self.root_dir_entries_16())
     }
 }
 
@@ -320,14 +375,18 @@ impl BiosParameterBlock for BpbFat16 {
         self.0.fat_size()
     }
 
-    fn root_dir_entries(&self) -> DirectoryEntries {
-        let root_dir_start_sector = self.root_dir_start_sector_16();
-        let ptr = self
-            .sector_ptr(root_dir_start_sector)
-            .cast::<DirectoryEntry>();
-        let root_entry_count = usize::from(self.root_entry_count());
-        let entries = unsafe { slice::from_raw_parts(ptr, root_entry_count) };
-        DirectoryEntries::new(entries)
+    fn fat_entry(&self, cluster: u32) -> FatEntry {
+        #[allow(clippy::unwrap_used)]
+        let cluster = usize::try_from(cluster).unwrap();
+        let fat_bytes = self.fat_bytes();
+
+        let bytes = &fat_bytes[cluster * mem::size_of::<u16>()..];
+        let value = u16::from_le_bytes([bytes[0], bytes[1]]);
+        FatEntry::from_fat16(value)
+    }
+
+    fn root_dir(&self) -> Directory {
+        Directory::new_root_dir(self.root_dir_entries_16())
     }
 }
 
@@ -344,20 +403,18 @@ impl BiosParameterBlock for BpbFat32 {
         self.fat_size_32()
     }
 
-    fn root_dir_entries(&self) -> DirectoryEntries {
-        let bytes_per_sector = usize::from(self.bytes_per_sector());
-        let sectors_per_cluster = usize::from(self.sectors_per_cluster());
+    fn fat_entry(&self, cluster: u32) -> FatEntry {
+        #[allow(clippy::unwrap_used)]
+        let cluster = usize::try_from(cluster).unwrap();
+        let fat_bytes = self.fat_bytes();
 
-        let root_dir_cluster = self.root_cluster();
-        let root_dir_start_sector = self.cluster_sector(root_dir_cluster);
-        let ptr = self
-            .sector_ptr(root_dir_start_sector)
-            .cast::<DirectoryEntry>();
-        let root_entry_count =
-            bytes_per_sector * sectors_per_cluster / mem::size_of::<DirectoryEntry>();
+        let bytes = &fat_bytes[cluster * mem::size_of::<u32>()..];
+        let value = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) & 0x0fff_ffff;
+        FatEntry::from_fat32(value)
+    }
 
-        let entries = unsafe { slice::from_raw_parts(ptr, root_entry_count) };
-        DirectoryEntries::new(entries)
+    fn root_dir(&self) -> Directory {
+        Directory::new_cluster_chain(self.cluster_chain(self.root_cluster()))
     }
 }
 

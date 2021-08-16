@@ -20,22 +20,22 @@ debug = true
 [dependencies]
 arrayvec = { version = "0.7.1", default-features = false }
 bit_field = "0.10.1"
-bootloader = "0.10.6"
+bootloader = "0.10.7"
 conquer-once = { version = "0.3.2", default-features = false }
 crossbeam-queue = { version = "0.3.2", default-features = false, features = ["alloc"] }
 custom_debug_derive = "0.5.0"
 derivative = { version = "2.2.0", features = ["use_core"] }
 enumflags2 = "0.7.1"
-futures-util = { version = "0.3.15", default-features = false, features = ["alloc", "async-await-macro"] }
+futures-util = { version = "0.3.16", default-features = false, features = ["alloc", "async-await-macro"] }
 linked_list_allocator = "0.9.0"
 mikanos_usb = { path = "./mikanos_usb" }
 num-traits = { version = "0.2.14", default-features = false }
-pin-project = "1.0.7"
-spin = "0.9.1"
+pin-project = "1.0.8"
+spin = "0.9.2"
 static_assertions = "1.1.0"
 uart_16550 = "0.2.15"
 volatile = "0.4.4"
-x86_64 = "0.14.3"
+x86_64 = "0.14.4"
 
 [build-dependencies]
 color-eyre = "0.5.11"
